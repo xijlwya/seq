@@ -157,7 +157,6 @@ class Timer:
 			if delta_t >= self._pulse_length:
 				self.receiver.send(mido.Message('clock'))
 				delta_t = 0
-				print('clock sent')
 			delta_t += time.perf_counter() - t0
 			#print('dt = '+str(delta_t))
 
@@ -231,21 +230,21 @@ class Sequencer(mido.ports.BaseOutput):
 			self.clock_callback()
 
 	def clock_callback(self):
-		print('callback')
 		with self.lock:
 			if self.pulses == 0:
-				step = next(self.seq)
-				##TODO: step has to be carried over to the note_off!
-				for note in noteToMIDI(step, channel=self.channel):
+				self._current_step = next(self.seq)
+				for note in noteToMIDI(self._current_step, channel=self.channel):
 					self.receiver.send(note)
-					print('sent:' + str(note))
+				self.pulses += 1
+
 			elif self.pulses == round(self._pulse_limit*self.note_length):
-				for note in noteToMIDI(step, msg_type='note_off', channel=self.channel):
+				for note in noteToMIDI(self._current_step, msg_type='note_off', channel=self.channel):
 					self.receiver.send(note)
-					print('sent:' + str(note))
 				self.pulses = 0
 
-			self.pulses += 1
+			else:
+				self.pulses += 1
+
 
 	def stop(self):
 		self.timer.running = False
@@ -257,7 +256,8 @@ class Sequencer(mido.ports.BaseOutput):
 
 	@division.setter
 	def division(self, val):
-		if 0 < val < 1024:
+		if 0 < val and round(self.timer.ppqn*4/val) > 0:
+			#TODO is this check sane??
 			self._division = val
 			self._pulse_limit = round(self.timer.ppqn*4/self.division)
 		else:
