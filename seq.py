@@ -134,6 +134,10 @@ class Sequence(collections.abc.MutableSequence):
 class Timer:
 	def __init__(self, receiver=None, ppqn=24, tempo=120):
 		"""
+		A timer will continuously send MIDI clock messages to its receiver. It
+		does so from a daemon thread so it is terminated ungraciously when the
+		interpreter exits.
+
 		-	'receiver' is an mido output with a send method
 		-	'ppqn' means "pulses per quarter note" and determines how many clock
 			msgs are sent per quarter note
@@ -144,10 +148,12 @@ class Timer:
 		#self.clock_in = clock_in
 		self.running = False
 		self.receiver = receiver
+		#TODO: timer should monitor whether its receiver(s) still exist
 
 		self.tempo = tempo
 
-		print(self._pulse_length)
+		self.start()
+
 
 	def _start(self):
 		self.running = True
@@ -161,7 +167,7 @@ class Timer:
 			#print('dt = '+str(delta_t))
 
 	def start(self):
-		threading.Thread(target=self._start).start()
+		threading.Thread(target=self._start, daemon=True).start()
 
 	@property
 	def tempo(self):
@@ -191,6 +197,7 @@ class Sequencer(mido.ports.BaseOutput):
 		channel=1
 	):
 		super().__init__(self)
+		self.running = False
 		if timer:
 			self.timer = timer
 		else:
@@ -202,31 +209,14 @@ class Sequencer(mido.ports.BaseOutput):
 		self.division = division
 		self.channel = channel
 		self.note_length = 0.5
-		self.running = False
 		self.pulses = 0
 
 
 		self.lock = threading.Lock()
 
-	# def _start(self):
-	# 	self.running = True
-	# 	for step in self.seq:
-	# 		with self.lock:
-	# 			for note in noteToMIDI(step, channel=self.channel):
-	# 				self.receiver.send(note)
-	# 			time.sleep(self.pulse_length*self.note_length)
-	# 			for note in noteToMIDI(step, msg_type='note_off', channel=self.channel):
-	# 				self.receiver.send(note)
-	# 			time.sleep(self.pulse_length*(1-self.note_length))
-	# 		if not self.running:
-	# 			break
-	#
-	# def start(self):
-	# 	threading.Thread(target=self._start).start()
-
 	def _send(self, msg):
 		#inherited fom mido.BaseOutput
-		if msg.type == 'clock':
+		if msg.type == 'clock' and self.running:
 			self.clock_callback()
 
 	def clock_callback(self):
@@ -235,11 +225,13 @@ class Sequencer(mido.ports.BaseOutput):
 				self._current_step = next(self.seq)
 				for note in noteToMIDI(self._current_step, channel=self.channel):
 					self.receiver.send(note)
+					print(note)
 				self.pulses += 1
 
 			elif self.pulses == round(self._pulse_limit*self.note_length):
 				for note in noteToMIDI(self._current_step, msg_type='note_off', channel=self.channel):
 					self.receiver.send(note)
+					print(note)
 				self.pulses = 0
 
 			else:
@@ -247,8 +239,11 @@ class Sequencer(mido.ports.BaseOutput):
 
 
 	def stop(self):
-		self.timer.running = False
 		self.receiver.reset()
+		self.running = False
+
+	def start(self):
+		self.running = True
 
 	@property
 	def division(self):
@@ -275,46 +270,12 @@ class Sequencer(mido.ports.BaseOutput):
 		else:
 			raise ValueError('Note length is the relative time a note takes of one step')
 
-sequence1 = Sequence(['c4','d4','e4','f4'], direction='backward')
-sequence2 = Sequence(['', 'd#1', '', 'd#1', None, 'c#1', '', 'c#1', 'c2', 'd#2', 'c2', 'd#2', 'a#0', 'a#0', 'a#0', 'a#0'], skip=3)
+if __name__ == '__main__':
+	sequence1 = Sequence(['c4','d4','e4','f4'], direction='backward')
+	sequence2 = Sequence(['', 'd#1', '', 'd#1', None, 'c#1', '', 'c#1', 'c2', 'd#2', 'c2', 'd#2', 'a#0', 'a#0', 'a#0', 'a#0'], skip=3)
 
-with mido.open_output(mido.get_output_names()[0]) as reface:
-	seq = Sequencer(sequence=sequence1, receiver=reface)
-	seq.timer.start()
-	time.sleep(5)
-	seq.stop()
-
-# ~ with mido.open_output(mido.get_output_names()[1]) as reface:
-	# ~ def play_note(notes, length, ratio):
-		# ~ print(notes)
-		# ~ message_list = []
-
-		# ~ for note in notes.split(' '):
-			# ~ if note:
-				# ~ note_value = note_names[note[0].lower()]
-			# ~ else:
-				# ~ break
-
-			# ~ if note[1] == '#' or note[1] == 'b':
-				# ~ if note[1] == '#':
-					# ~ note_value += 1
-				# ~ elif note[1] == 'b':
-					# ~ note_value -= 1
-				# ~ note_value += 12*int(note[2:])
-			# ~ else:
-				# ~ note_value += 12*int(note[1:])
-
-			# ~ message_list.append((
-				# ~ mido.Message('note_on', note=note_value, channel=1, velocity=64),
-				# ~ mido.Message('note_off', note=note_value, channel=1, velocity=64)
-				# ~ ))
-
-		# ~ for msg in message_list:
-			# ~ reface.send(msg[0])
-		# ~ time.sleep(length*ratio)
-		# ~ for msg in message_list:
-			# ~ reface.send(msg[1])
-		# ~ time.sleep(length*(1-ratio))
-
-	# ~ for note1, note2 in zip(sequence1, sequence2):
-		# ~ play_note(note1+' '+note2, pulse_length/4, 0.5)
+	with mido.open_output(mido.get_output_names()[0]) as reface:
+		seq = Sequencer(sequence=sequence1, receiver=reface)
+		seq.start()
+		time.sleep(5)
+		seq.stop()
