@@ -128,6 +128,17 @@ class Sequence(collections.abc.MutableSequence):
 		else:
 			self.cursor = 0
 
+	@property
+	def skip(self):
+		return self._skip
+
+	@skip.setter
+	def skip(self, val):
+		if 1 <= val and isinstance(val, int):
+			self._skip = val
+		else:
+			raise ValueError('Invalid skip')
+
 class Timer:
 	def __init__(self, receiver=None, ppqn=24, tempo=120):
 		"""
@@ -190,7 +201,9 @@ class Sequencer(mido.ports.BaseOutput):
 		timer=None,
 		tempo=120,
 		division=16,
-		channel=1
+		channel=1,
+		direction='forward',
+		skip=1,
 	):
 		super().__init__(self)
 		self.running = False
@@ -200,12 +213,14 @@ class Sequencer(mido.ports.BaseOutput):
 		else:
 			self.timer = Timer(receiver=self, tempo=tempo)
 
-		self.seq = iter(sequence)
+		self.seq_iter = iter(sequence)
+		self.seq = sequence
 		self.receiver = receiver
 		self.division = division #the musical note division, e.g. 16 means 16th-notes; i.e. notes per measure
 		self.channel = channel
 		self.note_length = 0.5
 		self.pulses = 0
+		self.seq.skip = skip
 		self.lock = threading.Lock()
 
 	def _send(self, msg):
@@ -216,7 +231,12 @@ class Sequencer(mido.ports.BaseOutput):
 	def clock_callback(self):
 		with self.lock:
 			if self.pulses == 0:
-				self._current_step = next(self.seq)
+				try:
+					self._current_step = next(self.seq_iter)
+				except ValueError:
+					self.seq.direction = 'forward'
+					self._current_step = next(self.seq_iter)
+
 				for note in noteToMIDI(self._current_step, channel=self.channel):
 					self.receiver.send(note)
 				self.pulses += 1
@@ -229,13 +249,20 @@ class Sequencer(mido.ports.BaseOutput):
 			else:
 				self.pulses += 1
 
-
 	def stop(self):
 		self.receiver.reset()
 		self.running = False
 
 	def start(self):
 		self.running = True
+
+	@property
+	def direction(self):
+		return self.seq.direction
+
+	@direction.setter
+	def direction(self, dir):
+		self.seq.direction = dir
 
 	@property
 	def division(self):
