@@ -45,7 +45,7 @@ def noteToMIDI(notes, msg_type='note_on', channel=1, velocity=127):
 class Sequence(collections.abc.MutableSequence):
 	"""
 	A sequence is a ring list which can be traversed by iterating over it. This
-	iteration does not terminate, but the contents of the list are returned
+	iteration does not terminate and the contents of the list are returned
 	repeatedly.
 
 	Depending on the self.direction, the sequence traverses forward or backward.
@@ -110,14 +110,11 @@ class Sequence(collections.abc.MutableSequence):
 				elif self.direction == 'random':
 					self.cursor = random.randint(0,len(self.__data__)-1)
 					return self.__data__[self.cursor]
-
 				else:
 					raise ValueError(self.direction + ' is invalid direction.')
 
 			else:
 				self.calls += 1
-
-				##TODO: Should this return? OR should it skip return?
 
 		else:
 			raise StopIteration
@@ -145,15 +142,11 @@ class Timer:
 			pulses are sent in one minute
 		"""
 		self.ppqn = ppqn
-		#self.clock_in = clock_in
 		self.running = False
 		self.receiver = receiver
-		#TODO: timer should monitor whether its receiver(s) still exist
-
 		self.tempo = tempo
 
 		self.start()
-
 
 	def _start(self):
 		self.running = True
@@ -161,10 +154,13 @@ class Timer:
 		while self.running:
 			t0 = time.perf_counter()
 			if delta_t >= self._pulse_length:
-				self.receiver.send(mido.Message('clock'))
+				if self.receiver.closed:
+					self.running = False
+				else:
+					self.receiver.send(mido.Message('clock'))
+
 				delta_t = 0
 			delta_t += time.perf_counter() - t0
-			#print('dt = '+str(delta_t))
 
 	def start(self):
 		threading.Thread(target=self._start, daemon=True).start()
@@ -198,20 +194,18 @@ class Sequencer(mido.ports.BaseOutput):
 	):
 		super().__init__(self)
 		self.running = False
+
 		if timer:
 			self.timer = timer
 		else:
 			self.timer = Timer(receiver=self, tempo=tempo)
+
 		self.seq = iter(sequence)
 		self.receiver = receiver
-
-		#the musical note division, e.g. 16 means 16th-notes; i.e. notes per measure
-		self.division = division
+		self.division = division #the musical note division, e.g. 16 means 16th-notes; i.e. notes per measure
 		self.channel = channel
 		self.note_length = 0.5
 		self.pulses = 0
-
-
 		self.lock = threading.Lock()
 
 	def _send(self, msg):
@@ -225,13 +219,11 @@ class Sequencer(mido.ports.BaseOutput):
 				self._current_step = next(self.seq)
 				for note in noteToMIDI(self._current_step, channel=self.channel):
 					self.receiver.send(note)
-					print(note)
 				self.pulses += 1
 
 			elif self.pulses == round(self._pulse_limit*self.note_length):
 				for note in noteToMIDI(self._current_step, msg_type='note_off', channel=self.channel):
 					self.receiver.send(note)
-					print(note)
 				self.pulses = 0
 
 			else:
@@ -257,7 +249,6 @@ class Sequencer(mido.ports.BaseOutput):
 			self._pulse_limit = round(self.timer.ppqn*4/self.division)
 		else:
 			raise ValueError('Note division out of bounds')
-
 
 	@property
 	def note_length(self):
