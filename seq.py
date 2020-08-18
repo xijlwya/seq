@@ -60,16 +60,11 @@ class Sequence(collections.abc.MutableSequence):
 	iteration does not terminate and the contents of the list are returned
 	repeatedly.
 
-	Depending on the self.direction, the sequence traverses forward or backward.
 	"""
-	def __init__(self, elems, direction='forward', skip=1):
+	def __init__(self, elems):
 		self.__data__ = list(elems)
-		self.direction = direction
-		self.skip = skip
-		#every 'skip' calls to __next__, the sequence will play a note
-
-		self.calls = 0
-		self.lock = threading.Lock()
+		self._step = 1
+		self._lock = threading.Lock()
 		self.reset()
 
 	def __len__(self):
@@ -89,8 +84,7 @@ class Sequence(collections.abc.MutableSequence):
 
 	def __delitem__(self, index):
 		del self[index]
-		if self.cursor > 0:
-			self.cursor -= 1
+		self._cursor -= 1
 
 	def insert(self, index, obj):
 		#insert value before index
@@ -98,62 +92,27 @@ class Sequence(collections.abc.MutableSequence):
 
 	def __next__(self):
 		#CAUTION: this will iterate forever!
-		self.calls += 1
-
-		if len(self) > 0:
-			with self.lock:
-				if self.calls % self.skip == 0:
-					#IF the number of calls is a multiple of skip
-
-					self.calls = 0
-
-					if self.direction == 'forward':
-						if self.cursor < len(self.__data__):
-							self.cursor += 1
-							return self.__data__[self.cursor-1]
-						else:
-							self.cursor = 1
-							return self.__data__[0]
-
-					elif self.direction == 'backward':
-						if self.cursor > 0:
-							self.cursor -= 1
-							return self.__data__[self.cursor+1]
-						else:
-							self.cursor = len(self.__data__) - 1
-							return self.__data__[0]
-
-					elif self.direction == 'random':
-						self.cursor = random.randint(0,len(self.__data__)-1)
-						return self.__data__[self.cursor]
-					else:
-						raise ValueError(self.direction + ' is invalid direction.')
-
-				else:
-					self.calls += 1
-
-		else:
-			raise StopIteration
+		with self._lock:
+			if len(self) > 0:
+				self._cursor += self._step
+				self._cursor = self._cursor%len(self)
+				return self[self._cursor - self._step]
+			else:
+				raise StopIteration
 
 	def __iter__(self):
 		return self
 
 	def reset(self):
-		if self.direction == 'backward':
-			self.cursor = len(self.__data__) - 1
-		else:
-			self.cursor = 0
+		self._cursor = 0
 
 	@property
-	def skip(self):
-		return self._skip
+	def step(self):
+		return self._step
 
-	@skip.setter
-	def skip(self, val):
-		if 1 <= val and isinstance(val, int):
-			self._skip = val
-		else:
-			raise ValueError('Invalid skip: '+str(val))
+	@step.setter
+	def step(self, val):
+		self._step = val
 
 
 class Singleton(type):
@@ -177,26 +136,26 @@ class Timer(metaclass=Singleton):
 	pulses are sent in one minute
 	"""
 	def __init__(self, tempo=120):
-		self.running = False
+		self._running = False
 		self.tempo = tempo
 		self.receivers = []
-		self.lock = threading.Lock()
+		self._lock = threading.Lock()
 		self.start()
 
 	def _start(self):
-		self.running = True
+		self._running = True
 		delta_t = 0
-		while self.running:
+		while self._running:
 			t0 = time.perf_counter()
 			if delta_t >= self._pulse_length:
-				self.running = False
-				with self.lock:
+				with self._lock:
 					for r in self.receivers:
-						if not r.closed:
-							self.running = True
+						try:
 							r.send(mido.Message('clock'))
-						else:
+						except ValueError:
 							self.receivers.remove(r)
+							if len(self.receivers) == 0:
+								self._running = False
 				delta_t = 0
 			delta_t += time.perf_counter() - t0
 
@@ -215,13 +174,9 @@ class Timer(metaclass=Singleton):
 		else:
 			raise ValueError('tempo out of bounds.')
 
-	def add_receiver(self, add):
-		if 	hasattr(add, 'send') and \
-			hasattr(add, 'closed') and \
-			add not in self.receivers and \
-			not add.closed:
-			#checks whether the new receiver is a mido port
-			self.receivers.append(add)
+	def add_receiver(self, rec):
+		self.receivers.append(rec)
+		print(self.receivers)
 
 	def remove_receiver(self, rec):
 		self.receivers.remove(rec)
@@ -229,9 +184,7 @@ class Timer(metaclass=Singleton):
 
 class Sequencer(mido.ports.BaseOutput):
 	"""
-	A sequencer plays back sequences to a MIDI device. It manages its own tempo
-	and tempo subdivision. It executes in a separate thread and is safely
-	manipulateable during playback.
+	A sequencer plays back sequences to a MIDI device.
 	"""
 	def __init__(
 		self,
@@ -239,64 +192,66 @@ class Sequencer(mido.ports.BaseOutput):
 		receiver=None,
 		division=16,
 		channel=1,
-		direction='forward',
-		skip=1,
+		step=1
 	):
-		super().__init__(self)
-		self.running = False
+		super().__init__()
+		self._running = False
 
 		Timer().add_receiver(self)
 
-		self.seq_iter = iter(sequence)
-		self.seq = sequence
+		self._seq_iter = iter(sequence)
+		self._sequence = sequence
 		self.receiver = receiver
-		self.division = division #the musical note division, e.g. 16 means 16th-notes; i.e. notes per measure
+
+		self.division = division
+		#the musical note division,
+		#e.g. 16 means 16th-notes; i.e. notes per measure
+
 		self.channel = channel
 		self.note_length = 0.5
-		self.pulses = 0
-		self.seq.skip = skip #TODO: something breaks with skip != 1
-		self.lock = threading.Lock()
+		self._pulses = 0
+		self._step = step
+
+		self.__lock = threading.Lock()
+		#mido.ports.BaseOutput has a self._lock as well, so this is dundered
 
 	def _send(self, msg):
-		#inherited fom mido.BaseOutput
-		if msg.type == 'clock' and self.running:
+		#inherited from mido.BaseOutput
+		if msg.type == 'clock' and self._running:
 			self.clock_callback()
 
 	def clock_callback(self):
-		with self.lock:
-			if self.pulses == 0:
-				try:
-					self._current_step = next(self.seq_iter)
-				except ValueError:
-					self.seq.direction = 'forward'
-					self._current_step = next(self.seq_iter)
+		with self.__lock:
+			if self._pulses == 0:
+				self._current_step = next(self._seq_iter)
 
-				for note in noteToMIDI(self._current_step, channel=self.channel):
+				for note in noteToMIDI(
+					self._current_step,
+					channel=self.channel
+				):
 					self.receiver.send(note)
-				self.pulses += 1
+					print('sent '+str(note))
+				self._pulses += 1
 
-			elif self.pulses == round(self._pulse_limit*self.note_length):
-				for note in noteToMIDI(self._current_step, msg_type='note_off', channel=self.channel):
+			elif self._pulses == round(self._pulse_limit*self.note_length):
+				for note in noteToMIDI(
+					self._current_step,
+					msg_type='note_off',
+					channel=self.channel
+				):
 					self.receiver.send(note)
-				self.pulses = 0
+					print('sent '+str(note))
+				self._pulses = 0
 
 			else:
-				self.pulses += 1
+				self._pulses += 1
 
 	def stop(self):
 		self.receiver.reset()
-		self.running = False
+		self._running = False
 
 	def start(self):
-		self.running = True
-
-	@property
-	def direction(self):
-		return self.seq.direction
-
-	@direction.setter
-	def direction(self, dir):
-		self.seq.direction = dir
+		self._running = True
 
 	@property
 	def division(self):
@@ -304,8 +259,6 @@ class Sequencer(mido.ports.BaseOutput):
 
 	@division.setter
 	def division(self, val):
-		#TODO decouple Timer and Sequencer
-
 		if 0 < val and round(PPQN*4/val) > 0:
 			#TODO is this check sane??
 			self._division = val
@@ -324,46 +277,35 @@ class Sequencer(mido.ports.BaseOutput):
 		else:
 			raise ValueError('Note length is the relative time a note takes of one step')
 
+	@property
+	def step(self):
+		return self._sequence.step
+
+	@step.setter
+	def step(self, val):
+		self._sequence.step = val
+
+	@property
+	def sequence(self):
+		return self._sequence
+
+	@sequence.setter
+	def sequence(self, seq):
+		self._sequence = seq
+		self._sequence.step = self.step
 
 	##TODO: set up a sequence property so the new sequence is behaving like the old sequence
 
 if __name__ == '__main__':
 	##TODO: this should be a test
-	sequence1 = Sequence(['c4','d#4','g4','',''])
-	sequence2 = Sequence(['g3','g3','c3','c3'])
+	sequence1 = Sequence(['f3','g#3','c4'])
+	sequence2 = Sequence(['g#4','c5','f4'])
 
-	with mido.open_output(mido.get_output_names()[0]) as reface:
+	with mido.open_output(mido.get_output_names()[1]) as reface:
 		seq1 = Sequencer(sequence=sequence1, receiver=reface)
 		seq2 = Sequencer(sequence=sequence2, receiver=reface)
-		# print(seq1.timer.receivers)
 		seq1.start()
 		seq2.start()
 		time.sleep(5)
-		# seq2.skip = 2
-		# time.sleep(5)
-		# seq1.direction = 'backward'
-		# print('seq1 backwards')
-		# seq2.direction = 'random'
-		# print('seq2 random')
-		# time.sleep(0.5)
-		# seq1.skip = 2
-		# print('seq1 skip 2')
-		# seq2.skip = 3
-		# print('seq2 skip 3')
-		# seq2.division = 64
-		# print('seq2 div 64')
-		# seq2.note_length = 0.9
-		# print('seq2 notelength 0.9')
-		# time.sleep(0.5)
-		# seq1.note_length = 0.2
-		# print('seq1 notelnegth 0.2')
-		# seq1.division = 32
-		# print('seq1 div 32')
-		# seq1.direction = 'forward'
-		# print('seq1 forward')
-		# time.sleep(0.5)
-		# seq2.seq = sequence1
-		# seq1.seq = sequence2
-		# time.sleep(0.5)
 		seq1.stop()
 		seq2.stop()
