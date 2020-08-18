@@ -175,7 +175,6 @@ class Timer(metaclass=Singleton):
 
 	def add_receiver(self, rec):
 		self.receivers.append(rec)
-		print(self.receivers)
 
 	def remove_receiver(self, rec):
 		self.receivers.remove(rec)
@@ -216,8 +215,11 @@ class Sequencer(mido.ports.BaseOutput):
 
 	def _send(self, msg):
 		#inherited from mido.BaseOutput
-		if msg.type == 'clock' and self._running:
-			self.clock_callback()
+		if self._running:
+			if msg.type == 'clock':
+				self.clock_callback()
+			elif msg.type == 'note_on' or msg.type == 'note_off':
+				self.note_callback(msg)
 
 	def clock_callback(self):
 		with self.__lock:
@@ -229,7 +231,6 @@ class Sequencer(mido.ports.BaseOutput):
 					channel=self.channel
 				):
 					self.receiver.send(note)
-					print('sent '+str(note))
 				self._pulses += 1
 
 			elif self._pulses == round(self._pulse_limit*self.note_length):
@@ -239,11 +240,14 @@ class Sequencer(mido.ports.BaseOutput):
 					channel=self.channel
 				):
 					self.receiver.send(note)
-					print('sent '+str(note))
 				self._pulses = 0
 
 			else:
 				self._pulses += 1
+
+	def note_callback(self, msg):
+		pass
+		#TODO: transpose
 
 	def stop(self):
 		self.receiver.reset()
@@ -296,6 +300,12 @@ class Sequencer(mido.ports.BaseOutput):
 
 	##TODO: set up a sequence property so the new sequence is behaving like the old sequence
 
+class Arpeggiator(Sequencer):
+	def __init__(self, receiver=None):
+		super().__init__()
+			
+
+
 if __name__ == '__main__':
 	##TODO: this should be a test
 	sequence1 = Sequence(['f3','g#3','c4'])
@@ -307,7 +317,6 @@ if __name__ == '__main__':
 		print('{num}: {name}'.format(num=num, name=name))
 
 	port = int(input('(seq)'))
-
 
 	with mido.open_output(output_list[port]) as synth:
 		seq1 = Sequencer(sequence=sequence1, receiver=synth)
