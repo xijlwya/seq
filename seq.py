@@ -4,6 +4,7 @@ import random
 import collections.abc
 import threading
 
+
 note_names = {
 	'c':60,
 	'd':62,
@@ -13,6 +14,9 @@ note_names = {
 	'a':69,
 	'b':71
 	}
+
+PPQN = 24
+
 
 def noteToMIDI(notes, msg_type='note_on', channel=1, velocity=127):
 	"""
@@ -48,6 +52,7 @@ def noteToMIDI(notes, msg_type='note_on', channel=1, velocity=127):
 			)
 
 	return message_list
+
 
 class Sequence(collections.abc.MutableSequence):
 	"""
@@ -151,79 +156,70 @@ class Sequence(collections.abc.MutableSequence):
 			raise ValueError('Invalid skip: '+str(val))
 
 
-class Singleton(type):
-	#copied from
-	#https://stackoverflow.com/questions/6760685/creating-a-singleton-in-python
-	_instances = {}
-	def __call__(cls, *args, **kwargs):
-		if cls not in cls._instances:
-			cls._instances[cls] = \
-				super(Singleton, cls).__call__(*args, **kwargs)
-		return cls._instances[cls]
-
-
-class Timer(metaclass=Singleton):
+class Timer:
 	"""
 	A timer will continuously send MIDI clock messages to its receiver. It
 	does so from a daemon thread so it is terminated ungraciously when the
 	interpreter exits.
 
-	-	'receiver' is an mido output with a send method
-	-	'ppqn' means "pulses per quarter note" and determines how many clock
-	msgs are sent per quarter note
 	-	'tempo' is the rate of the clock in bpm. That means that tempo*ppqn
 	pulses are sent in one minute
 	"""
-	def __init__(self, ppqn=24, tempo=120):
-		self.ppqn = ppqn
-		self.running = False
-		self.tempo = tempo
-		self.receivers = []
-		self.lock = threading.Lock()
-		self.start()
+	_running = False
+	_receivers = []
+	_lock = threading.Lock()
 
-	def _start(self):
-		self.running = True
+	@classmethod
+	def _start(cls):
+		cls.running = True
 		delta_t = 0
-		while self.running:
+		while cls.running:
 			t0 = time.perf_counter()
-			if delta_t >= self._pulse_length:
-				self.running = False
-				with self.lock:
-					for r in self.receivers:
+			if delta_t >= cls._pulse_length:
+				cls.running = False
+				with cls.lock:
+					for r in cls.receivers:
 						if not r.closed:
-							self.running = True
+							cls.running = True
 							r.send(mido.Message('clock'))
 						else:
-							self.receivers.remove(r)
+							cls.receivers.remove(r)
 				delta_t = 0
 			delta_t += time.perf_counter() - t0
 
-	def start(self):
-		threading.Thread(target=self._start, daemon=True).start()
+	@classmethod
+	def start(cls, tempo):
+		print('called start')
+		cls.tempo = tempo
+		threading.Thread(target=cls._start, daemon=True).start()
 
 	@property
-	def tempo(self):
-		return self._tempo
+	@classmethod
+	def tempo(cls):
+		return cls._tempo
 
 	@tempo.setter
-	def tempo(self, val):
+	@classmethod
+	def tempo(cls, val):
 		if 10 < val < 1000:
-			self._tempo = val
-			self._pulse_length = 60/(self.tempo*self.ppqn)
+			cls._tempo = val
+			cls._pulse_length = 60/(cls.tempo*PPQN)
 		else:
-			raise ValueError('tempo out of bounds.')
+			raise ValueError('tempo out of bounds: '+str(val))
 
-	def add_receiver(self, add):
+	@classmethod
+	def add_receiver(cls, add):
 		if 	hasattr(add, 'send') and \
 			hasattr(add, 'closed') and \
-			add not in self.receivers and \
+			add not in cls._receivers and \
 			not add.closed:
 			#checks whether the new receiver is a mido port
-			self.receivers.append(add)
+			cls._receivers.append(add)
 
-	def remove_receiver(self, rec):
-		self.receivers.remove(rec)
+	@classmethod
+	def remove_receiver(cls, rec):
+		cls._receivers.remove(rec)
+
 
 class Sequencer(mido.ports.BaseOutput):
 	"""
@@ -243,8 +239,7 @@ class Sequencer(mido.ports.BaseOutput):
 		super().__init__(self)
 		self.running = False
 
-		self.timer = Timer()
-		self.timer.add_receiver(self)
+		Timer.add_receiver(self)
 
 		self.seq_iter = iter(sequence)
 		self.seq = sequence
@@ -253,7 +248,7 @@ class Sequencer(mido.ports.BaseOutput):
 		self.channel = channel
 		self.note_length = 0.5
 		self.pulses = 0
-		self.seq.skip = skip
+		self.seq.skip = skip #TODO: something breaks with skip != 1
 		self.lock = threading.Lock()
 
 	def _send(self, msg):
@@ -305,10 +300,10 @@ class Sequencer(mido.ports.BaseOutput):
 	def division(self, val):
 		#TODO decouple Timer and Sequencer
 
-		if 0 < val and round(self.timer.ppqn*4/val) > 0:
+		if 0 < val and round(PPQN*4/val) > 0:
 			#TODO is this check sane??
 			self._division = val
-			self._pulse_limit = round(self.timer.ppqn*4/self.division)
+			self._pulse_limit = round(PPQN*4/self.division)
 		else:
 			raise ValueError('Note division out of bounds')
 
@@ -323,18 +318,18 @@ class Sequencer(mido.ports.BaseOutput):
 		else:
 			raise ValueError('Note length is the relative time a note takes of one step')
 
+
 	##TODO: set up a sequence property so the new sequence is behaving like the old sequence
 
 if __name__ == '__main__':
+	Timer.start(120)
 	##TODO: this should be a test
 	sequence1 = Sequence(['c4','d#4','g4','',''])
 	sequence2 = Sequence(['g3','g3','c3','c3'])
 
-	with mido.open_output(mido.get_output_names()[1]) as reface:
+	with mido.open_output(mido.get_output_names()[0]) as reface:
 		seq1 = Sequencer(sequence=sequence1, receiver=reface)
 		seq2 = Sequencer(sequence=sequence2, receiver=reface)
-		print('seq1 timer: '+str(seq1.timer))
-		print('seq2 timer: '+str(seq2.timer))
 		# print(seq1.timer.receivers)
 		seq1.start()
 		seq2.start()
