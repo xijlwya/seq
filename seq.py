@@ -4,7 +4,6 @@ import random
 import collections.abc
 import threading
 
-
 note_names = {
 	'c':60,
 	'd':62,
@@ -132,8 +131,8 @@ class Timer(metaclass=Singleton):
 	does so from a daemon thread so it is terminated ungraciously when the
 	interpreter exits.
 
-	-	'tempo' is the rate of the clock in bpm. That means that tempo*ppqn
-	pulses are sent in one minute
+	-	'tempo' is the rate of the clock in bpm. That means that tempo*PPQN
+		pulses are sent in one minute
 	"""
 	def __init__(self, tempo=120):
 		self._running = False
@@ -275,7 +274,8 @@ class Sequencer(mido.ports.BaseOutput):
 		if 0 <= val <= 1.0:
 			self._note_length = val
 		else:
-			raise ValueError('Note length is the relative time a note takes of one step')
+			raise ValueError('Note length is the relative " \
+				"time a note takes of one step')
 
 	@property
 	def step(self):
@@ -301,9 +301,17 @@ if __name__ == '__main__':
 	sequence1 = Sequence(['f3','g#3','c4'])
 	sequence2 = Sequence(['g#4','c5','f4'])
 
-	with mido.open_output(mido.get_output_names()[1]) as reface:
-		seq1 = Sequencer(sequence=sequence1, receiver=reface)
-		seq2 = Sequencer(sequence=sequence2, receiver=reface)
+	output_list = mido.get_output_names()
+	print('Select the target port:')
+	for num, name in enumerate(output_list):
+		print('{num}: {name}'.format(num=num, name=name))
+
+	port = int(input('(seq)'))
+
+
+	with mido.open_output(output_list[port]) as synth:
+		seq1 = Sequencer(sequence=sequence1, receiver=synth)
+		seq2 = Sequencer(sequence=sequence2, receiver=synth)
 		seq1.start()
 		seq2.start()
 		time.sleep(5)
