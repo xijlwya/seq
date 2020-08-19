@@ -14,43 +14,26 @@ note_names = {
 	'b':71
 	}
 
+chord_names = {
+	'min'		:(0, 3, 7),
+	'maj'		:(0, 4, 7),
+	'min7'		:(0, 3, 7, 10),
+	'7'			:(0, 4, 7, 10),
+	'minmaj7'	:(0, 3, 7, 11),
+	'maj7'		:(0, 4, 7, 11)
+}
+
+scale_names = {
+	'lydian'	:(0, 2, 4, 5, 7, 9, 10),
+	'ionian'	:(0, 2, 4, 5, 7, 9, 11),
+	'mixolydian':(0, 2, 4, 5, 7, 9, 10),
+	'dorian'	:(0, 2, 3, 5, 7, 9, 10),
+	'aeolian'	:(0, 2, 3, 5, 7, 8, 10),
+	'phrygian'	:(0, 1, 3, 5, 7, 8, 10),
+	'locrian'	:(0, 1, 3, 5, 6, 8, 10)
+}
+
 PPQN = 24
-
-
-def noteToMIDI(notes, msg_type='note_on', channel=1, velocity=127):
-	"""
-	Converts strings like 'c1', 'f#2', 'bb-3' to mido.Messages
-	"""
-	message_list = []
-
-	if notes:
-	#noteToMIDI receives None when a sequence skips a beat
-		for note in notes.split(' '):
-			if note:
-				note_value = note_names[note[0].lower()]
-			else:
-				break
-
-			if note[1] == '#' or note[1] == 'b':
-				if note[1] == '#':
-					note_value += 1
-				elif note[1] == 'b':
-					note_value -= 1
-				note_value += 12*(int(note[2:])-4)
-				#-4 because c4 is the middle c - MIDI note 60
-			else:
-				note_value += 12*(int(note[1:])-4)
-
-			message_list.append(
-				mido.Message(
-					msg_type,
-					note=note_value,
-					channel=channel,
-					velocity=velocity
-				)
-			)
-
-	return message_list
 
 
 class Sequence(collections.abc.MutableSequence):
@@ -179,7 +162,6 @@ class Timer(metaclass=Singleton):
 	def remove_receiver(self, rec):
 		self.receivers.remove(rec)
 
-
 class Sequencer(mido.ports.BaseOutput):
 	"""
 	A sequencer plays back sequences to a MIDI device.
@@ -193,6 +175,10 @@ class Sequencer(mido.ports.BaseOutput):
 		step=1
 	):
 		super().__init__()
+		#for inheriting from BaseOutput
+		self.__lock = threading.Lock()
+		#mido.ports.BaseOutput has a self._lock as well, so this is dundered
+
 		self._running = False
 
 		Timer().add_receiver(self)
@@ -200,6 +186,7 @@ class Sequencer(mido.ports.BaseOutput):
 		self._seq_iter = iter(sequence)
 		self._sequence = sequence
 		self.receiver = receiver
+		#receiver is supposed to be a mido port with a send(msg) method
 
 		self.division = division
 		#the musical note division,
@@ -210,8 +197,6 @@ class Sequencer(mido.ports.BaseOutput):
 		self._pulses = 0
 		self._step = step
 
-		self.__lock = threading.Lock()
-		#mido.ports.BaseOutput has a self._lock as well, so this is dundered
 
 	def _send(self, msg):
 		#inherited from mido.BaseOutput
@@ -226,7 +211,7 @@ class Sequencer(mido.ports.BaseOutput):
 			if self._pulses == 0:
 				self._current_step = next(self._seq_iter)
 
-				for note in noteToMIDI(
+				for note in self.noteToMIDI(
 					self._current_step,
 					channel=self.channel
 				):
@@ -234,7 +219,7 @@ class Sequencer(mido.ports.BaseOutput):
 				self._pulses += 1
 
 			elif self._pulses == round(self._pulse_limit*self.note_length):
-				for note in noteToMIDI(
+				for note in self.noteToMIDI(
 					self._current_step,
 					msg_type='note_off',
 					channel=self.channel
@@ -244,6 +229,42 @@ class Sequencer(mido.ports.BaseOutput):
 
 			else:
 				self._pulses += 1
+
+	@classmethod
+	def noteToMIDI(cls, notes, msg_type='note_on', channel=1, velocity=127):
+		"""
+		Converts strings like 'c1', 'f#2', 'bb-3' to mido.Messages
+		"""
+		message_list = []
+
+		if notes:
+		#noteToMIDI receives None when a sequence skips a beat
+			for note in notes.split(' '):
+				if note:
+					note_value = note_names[note[0].lower()]
+				else:
+					break
+
+				if note[1] == '#' or note[1] == 'b':
+					if note[1] == '#':
+						note_value += 1
+					elif note[1] == 'b':
+						note_value -= 1
+					note_value += 12*(int(note[2:])-4)
+					#-4 because c4 is the middle c - MIDI note 60
+				else:
+					note_value += 12*(int(note[1:])-4)
+
+				message_list.append(
+					mido.Message(
+						msg_type,
+						note=note_value,
+						channel=channel,
+						velocity=velocity
+					)
+				)
+
+		return message_list
 
 	def note_callback(self, msg):
 		pass
@@ -301,9 +322,58 @@ class Sequencer(mido.ports.BaseOutput):
 	##TODO: set up a sequence property so the new sequence is behaving like the old sequence
 
 class Arpeggiator(Sequencer):
+	##TODO: Sequencer and Arpeggiator should inherit from a common base class
 	def __init__(self, receiver=None):
-		super().__init__()
-			
+		super().__init__(
+			sequence=Sequence([]),
+			receiver=receiver,
+			division=16,
+			channel=1,
+			step=1
+		):
+		self.rhythm = [True]
+		self.chord = 'cmaj'
+
+	@classmethod
+	def _from_val_to_notename(cls, val):
+		##TODO: how the hell do I get the right note --> c# == db in this
+		for k,v in note_names.items():
+			if v == val:
+				return k
+			elif v+1 == val:
+				return k+'#'
+			elif v-1 == val:
+				return k+'b'
+
+
+	def _create_sequence(self):
+		if self.chord[1] == '#' or self.chord[1] == 'b':
+			_root_note = self.chord[:2].lower()
+			_chord_modifier = self.chord[2:].lower()
+		else:
+			_root_note = self.chord[:1].lower()
+			_chord_modifier = self.chord[1:].lower()
+
+
+		note_val = note_names[_root_note[0]]
+		if len(_root_note) == 2:
+			if _root_note[1] == '#':
+				note_val += 1
+			elif _root_note[1] == 'b':
+				note_val -= 1
+
+		notelist = []
+
+		try:
+ 			tup = _chord_names[_chord_modifier]
+		except KeyError:
+			tup = _chord_names['maj']
+
+		for semitones in tup:
+			notelist.append(self._from_val_to_notename(note_val + semitones))
+
+
+
 
 
 if __name__ == '__main__':
