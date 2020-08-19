@@ -24,7 +24,7 @@ chord_names = {
 	'sus2'		:(0, 2, 7),
 	'sus4'		:(0, 5, 7),
 	'dim'		:(0, 3, 6),
-	'dim7'		:(0, 3, 6, 9),	
+	'dim7'		:(0, 3, 6, 9),
 }
 
 scale_names = {
@@ -82,6 +82,7 @@ class Sequence(collections.abc.MutableSequence):
 			if len(self) > 0:
 				self._cursor += self._step
 				self._cursor = self._cursor%len(self)
+				#the cursor will always be with len(self)
 				return self[self._cursor - self._step]
 			else:
 				raise StopIteration
@@ -215,7 +216,7 @@ class Sequencer(mido.ports.BaseOutput):
 			if self._pulses == 0:
 				self._current_step = next(self._seq_iter)
 
-				for note in self.noteToMIDI(
+				for note in self.note_to_midi(
 					self._current_step,
 					channel=self.channel
 				):
@@ -223,7 +224,7 @@ class Sequencer(mido.ports.BaseOutput):
 				self._pulses += 1
 
 			elif self._pulses == round(self._pulse_limit*self.note_length):
-				for note in self.noteToMIDI(
+				for note in self.note_to_midi(
 					self._current_step,
 					msg_type='note_off',
 					channel=self.channel
@@ -235,14 +236,14 @@ class Sequencer(mido.ports.BaseOutput):
 				self._pulses += 1
 
 	@classmethod
-	def noteToMIDI(cls, notes, msg_type='note_on', channel=1, velocity=127):
+	def note_to_midi(cls, notes, msg_type='note_on', channel=1, velocity=127):
 		"""
 		Converts strings like 'c1', 'f#2', 'bb-3' to mido.Messages
 		"""
 		message_list = []
 
 		if notes:
-		#noteToMIDI receives None when a sequence skips a beat
+		#note_to_midi receives None when a sequence skips a beat
 			for note in notes.split(' '):
 				if note:
 					note_value = note_names[note[0].lower()]
