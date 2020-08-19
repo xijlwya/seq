@@ -330,7 +330,7 @@ class Arpeggiator(Sequencer):
 			division=16,
 			channel=1,
 			step=1
-		):
+		)
 		self.rhythm = [True]
 		self.chord = 'cmaj'
 
