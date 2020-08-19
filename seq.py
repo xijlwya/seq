@@ -20,7 +20,11 @@ chord_names = {
 	'min7'		:(0, 3, 7, 10),
 	'7'			:(0, 4, 7, 10),
 	'minmaj7'	:(0, 3, 7, 11),
-	'maj7'		:(0, 4, 7, 11)
+	'maj7'		:(0, 4, 7, 11),
+	'sus2'		:(0, 2, 7),
+	'sus4'		:(0, 5, 7),
+	'dim'		:(0, 3, 6),
+	'dim7'		:(0, 3, 6, 9),	
 }
 
 scale_names = {
@@ -332,7 +336,7 @@ class Arpeggiator(Sequencer):
 			step=1
 		)
 		self.rhythm = [True]
-		self.chord = 'cmaj'
+		self.chord = 'cmin7'
 
 	@classmethod
 	def _from_val_to_notename(cls, val):
@@ -347,6 +351,7 @@ class Arpeggiator(Sequencer):
 
 
 	def _create_sequence(self):
+		#translates the chord to notes like 'c#'', 'd', etc.'
 		if self.chord[1] == '#' or self.chord[1] == 'b':
 			_root_note = self.chord[:2].lower()
 			_chord_modifier = self.chord[2:].lower()
@@ -365,12 +370,14 @@ class Arpeggiator(Sequencer):
 		notelist = []
 
 		try:
- 			tup = _chord_names[_chord_modifier]
+ 			tup = chord_names[_chord_modifier]
 		except KeyError:
-			tup = _chord_names['maj']
+			tup = chord_names['maj']
 
 		for semitones in tup:
 			notelist.append(self._from_val_to_notename(note_val + semitones))
+
+		return notelist
 
 
 
@@ -378,21 +385,24 @@ class Arpeggiator(Sequencer):
 
 if __name__ == '__main__':
 	##TODO: this should be a test
-	sequence1 = Sequence(['f3','g#3','c4'])
-	sequence2 = Sequence(['g#4','c5','f4'])
+	arp = Arpeggiator()
+	print(arp._create_sequence())
 
-	output_list = mido.get_output_names()
-	print('Select the target port:')
-	for num, name in enumerate(output_list):
-		print('{num}: {name}'.format(num=num, name=name))
-
-	port = int(input('(seq)'))
-
-	with mido.open_output(output_list[port]) as synth:
-		seq1 = Sequencer(sequence=sequence1, receiver=synth)
-		seq2 = Sequencer(sequence=sequence2, receiver=synth)
-		seq1.start()
-		seq2.start()
-		time.sleep(5)
-		seq1.stop()
-		seq2.stop()
+	# sequence1 = Sequence(['f3','g#3','c4'])
+	# sequence2 = Sequence(['g#4','c5','f4'])
+	#
+	# output_list = mido.get_output_names()
+	# print('Select the target port:')
+	# for num, name in enumerate(output_list):
+	# 	print('{num}: {name}'.format(num=num, name=name))
+	#
+	# port = int(input('(seq)'))
+	#
+	# with mido.open_output(output_list[port]) as synth:
+	# 	seq1 = Sequencer(sequence=sequence1, receiver=synth)
+	# 	seq2 = Sequencer(sequence=sequence2, receiver=synth)
+	# 	seq1.start()
+	# 	seq2.start()
+	# 	time.sleep(5)
+	# 	seq1.stop()
+	# 	seq2.stop()
