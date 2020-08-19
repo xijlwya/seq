@@ -48,33 +48,58 @@ class Sequence(collections.abc.MutableSequence):
 
 	"""
 	def __init__(self, elems):
-		self.__data__ = list(elems)
+		self.data = list(elems)
 		self._step = 1
 		self._lock = threading.Lock()
 		self.reset()
+		self.__data__ = [0]*len(self.data)
+		for pos, note in enumerate(self.data)
+			self.__data__[pos] = self._numerize(note)
+
+	def _numerize(self, note):
+		#expects a note string with chord notes separated by spaces
+		#examples: 'c e g', 'c' ,'c# d gb', 'd']
+		chord_list = []
+		for note in notes.split(' '):
+			if note:
+				note_value = note_names[note[0].lower()]
+			else:
+				break
+
+			if note[1] == '#' or note[1] == 'b':
+				if note[1] == '#':
+					note_value += 1
+				elif note[1] == 'b':
+					note_value -= 1
+				note_value += 12*(int(note[2:])-4)
+				#-4 because c4 is the middle c, MIDI note 60
+			else:
+				note_value += 12*(int(note[1:])-4)
+			chord_list.append(note_value)
+		return tuple(note_list)
+
 
 	def __len__(self):
 		return len(self.__data__)
 
 	def __getitem__(self, index):
-		if len(self) > 0:
-			try:
-				return self.__data__[index]
-			except IndexError:
-				return self.__data__[index%len(self.__data__)]
-		else:
-			raise IndexError('Sequence is empty')
+		return self.__data__[index]
 
 	def __setitem__(self, index, value):
 		self[index] = value
 
 	def __delitem__(self, index):
 		del self[index]
+		del self.data[index]
 		self._cursor -= 1
 
 	def insert(self, index, obj):
 		#insert value before index
-		self.__data__.insert(index, obj)
+		if isinstance(obj, string):
+			self.data.insert(index, obj)
+			self.__data__.insert(index, self.numerize(obj))
+		else:
+			self.__data__.insert(index, obj)
 
 	def __next__(self):
 		#CAUTION: this will iterate forever!
@@ -82,7 +107,7 @@ class Sequence(collections.abc.MutableSequence):
 			if len(self) > 0:
 				self._cursor += self._step
 				self._cursor = self._cursor%len(self)
-				#the cursor will always be with len(self)
+				#the cursor will always be within len(self)
 				return self[self._cursor - self._step]
 			else:
 				raise StopIteration
@@ -167,6 +192,7 @@ class Timer(metaclass=Singleton):
 	def remove_receiver(self, rec):
 		self.receivers.remove(rec)
 
+
 class Sequencer(mido.ports.BaseOutput):
 	"""
 	A sequencer plays back sequences to a MIDI device.
@@ -238,32 +264,17 @@ class Sequencer(mido.ports.BaseOutput):
 	@classmethod
 	def note_to_midi(cls, notes, msg_type='note_on', channel=1, velocity=127):
 		"""
-		Converts strings like 'c1', 'f#2', 'bb-3' to mido.Messages
+		Converts tuples of integers to MIDI Note messages
 		"""
 		message_list = []
 
 		if notes:
 		#note_to_midi receives None when a sequence skips a beat
-			for note in notes.split(' '):
-				if note:
-					note_value = note_names[note[0].lower()]
-				else:
-					break
-
-				if note[1] == '#' or note[1] == 'b':
-					if note[1] == '#':
-						note_value += 1
-					elif note[1] == 'b':
-						note_value -= 1
-					note_value += 12*(int(note[2:])-4)
-					#-4 because c4 is the middle c - MIDI note 60
-				else:
-					note_value += 12*(int(note[1:])-4)
-
+			for note in notes
 				message_list.append(
 					mido.Message(
 						msg_type,
-						note=note_value,
+						note=note,
 						channel=channel,
 						velocity=velocity
 					)
