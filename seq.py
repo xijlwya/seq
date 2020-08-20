@@ -240,6 +240,10 @@ class Sequence(collections.abc.MutableSequence):
 		self._step = step
 		self._iter = self._traverse()
 		self._iter.send(None)
+		#this is due to the fact that the first action on a generator has to be
+		#send(None) or a next() call on the iterator
+		#but the step.setter will call self._iter.send(val) before the first
+		#next() is called
 
 	@classmethod
 	def _string_to_note(cls, note):
@@ -299,7 +303,7 @@ class Sequence(collections.abc.MutableSequence):
 		while True:
 			while len(self) > 0:
 				i = (yield self[cur])
-				#values can be passed into this
+				#values can be passed into this with send()
 				#with this, you can change dir while the iterator runs
 				#see: https://docs.python.org/3/howto/functional.html#passing-values-into-a-generator
 				if i == 0:
@@ -464,9 +468,9 @@ class BaseSequencer(mido.ports.BaseOutput):
 		return message_list
 
 	def stop(self):
+		self._running = False
 		self.receiver.reset()
 		#mido method to send MIDI all note offs to port
-		self._running = False
 
 	def start(self):
 		self._running = True
