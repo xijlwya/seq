@@ -86,6 +86,7 @@ class Sequence(collections.abc.MutableSequence):
 		return self.__data__[index]
 
 	def __setitem__(self, index, value):
+		##TODO: update self.data as well by reversing _numerize somehow
 		self[index] = value
 
 	def __delitem__(self, index):
@@ -99,6 +100,7 @@ class Sequence(collections.abc.MutableSequence):
 			self.data.insert(index, obj)
 			self.__data__.insert(index, self.numerize(obj))
 		else:
+			##TODO: update self.data as well by reversing _numerize somehow
 			self.__data__.insert(index, obj)
 
 	def __next__(self):
@@ -107,7 +109,7 @@ class Sequence(collections.abc.MutableSequence):
 			if len(self) > 0:
 				self._cursor += self._step
 				self._cursor = self._cursor%len(self)
-				#the cursor will always be within len(self)
+				#with this, the cursor will always be within len(self)
 				return self[self._cursor - self._step]
 			else:
 				raise StopIteration
@@ -224,7 +226,11 @@ class Sequencer(mido.ports.BaseOutput):
 		#e.g. 16 means 16th-notes; i.e. notes per measure
 
 		self.channel = channel
+		#MIDI channel the sequencer sends on
+
 		self.note_length = 0.5
+		#note length is the relative time a note takes of one step
+
 		self._pulses = 0
 		self._step = step
 
@@ -239,6 +245,7 @@ class Sequencer(mido.ports.BaseOutput):
 
 	def clock_callback(self):
 		with self.__lock:
+		#TODO: has all of this to be locked? Can a subset be savely locked?
 			if self._pulses == 0:
 				self._current_step = next(self._seq_iter)
 
@@ -269,7 +276,8 @@ class Sequencer(mido.ports.BaseOutput):
 		message_list = []
 
 		if notes:
-		#note_to_midi receives None when a sequence skips a beat
+		#note_to_midi receives notes=None or empty tuple
+		#when a sequence skips a beat
 			for note in notes:
 				message_list.append(
 					mido.Message(
@@ -288,6 +296,7 @@ class Sequencer(mido.ports.BaseOutput):
 
 	def stop(self):
 		self.receiver.reset()
+		#mido method to send MIDI all note offs to port
 		self._running = False
 
 	def start(self):
@@ -315,8 +324,7 @@ class Sequencer(mido.ports.BaseOutput):
 		if 0 <= val <= 1.0:
 			self._note_length = val
 		else:
-			raise ValueError('Note length is the relative " \
-				"time a note takes of one step')
+			raise ValueError('Invalid note length: '+str(val))
 
 	@property
 	def step(self):
@@ -388,6 +396,7 @@ class Arpeggiator(Sequencer):
 
 		for semitones in chord_semitones:
 			notelist.append((note_val + semitones,))
+			#to return a list of tuples
 
 		return notelist
 
