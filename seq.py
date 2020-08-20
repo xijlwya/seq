@@ -230,22 +230,20 @@ class Sequence(collections.abc.MutableSequence):
 	iteration does not terminate and the contents of the list are returned
 	repeatedly.
 
+	The sequence may contain arbitrary values. There are a few helper class-
+	methods to deal with certain kinds of values systematically.
+
 	"""
-	def __init__(self, elems):
-		self.data = list(elems)
-		self._step = 1
+	def __init__(self, elems, step=1):
+		self.__data__ = list(elems)
 		self._lock = threading.Lock()
-		self.reset()
-		self.__data__ = [0]*len(self.data)
-		for pos, note_tuple in enumerate(self.data):
-			if isinstance(note_tuple, str):
-				self.__data__[pos] = self._numerize(note_tuple)
-			else:
-				self.__data__[pos] = note_tuple
+		self._step = step
+		self._iter = self._traverse()
+		self._iter.send(None)
 
-
-
-	def _numerize(self, note):
+	@classmethod
+	def _string_to_note(cls, note):
+		#helper method
 		#expects a note string with chord notes separated by spaces
 		#examples: 'c e g', 'c' ,'c# d gb', 'd']
 		chord_list = []
@@ -267,6 +265,11 @@ class Sequence(collections.abc.MutableSequence):
 			chord_list.append(note_value)
 		return tuple(chord_list)
 
+	def string_to_note(self):
+		note_list = []
+		for string in self.__data__:
+			note_list.append(self._string_to_note(string))
+		return Sequence(note_list)
 
 	def __len__(self):
 		return len(self.__data__)
@@ -280,34 +283,38 @@ class Sequence(collections.abc.MutableSequence):
 
 	def __delitem__(self, index):
 		del self[index]
-		del self.data[index]
 		self._cursor -= 1
 
 	def insert(self, index, obj):
 		#insert value before index
-		if isinstance(obj, string):
-			self.data.insert(index, obj)
-			self.__data__.insert(index, self.numerize(obj))
-		else:
-			##TODO: update self.data as well by reversing _numerize somehow
-			self.__data__.insert(index, obj)
-
-	def __next__(self):
-		#CAUTION: this will iterate forever!
-		with self._lock:
-			if len(self) > 0:
-				self._cursor += self._step
-				self._cursor = self._cursor%len(self)
-				#with this, the cursor will always be within len(self)
-				return self[self._cursor - self._step]
-			else:
-				raise StopIteration
+		self.__data__.insert(index, obj)
 
 	def __iter__(self):
-		return self
+		return self._iter
+
+	def _traverse(self):
+		cur = 0 		#cursor position
+		dir = self.step	#step direction
+		yield #to start the generator with a send without skipping the first element
+		while True:
+			while len(self) > 0:
+				i = (yield self[cur])
+				#values can be passed into this
+				#with this, you can change dir while the iterator runs
+				#see: https://docs.python.org/3/howto/functional.html#passing-values-into-a-generator
+				if i == 0:
+					#send(0) will reset the cursor
+					cur = 0
+				elif i is None:
+					cur += dir
+					cur = cur%len(self)
+				else:
+					dir = i
+			yield None
+			#this will yield None until some data is in the Sequence
 
 	def reset(self):
-		self._cursor = 0
+		self._iter.send(0)
 
 	@property
 	def step(self):
@@ -315,7 +322,11 @@ class Sequence(collections.abc.MutableSequence):
 
 	@step.setter
 	def step(self, val):
-		self._step = val
+		if val != 0:
+			self._step = val
+			self._iter.send(val)
+		else:
+			raise ValueError('step cannot be zero!')
 
 
 class Singleton(type):
@@ -644,7 +655,7 @@ if __name__ == '__main__':
 	##TODO: this should be a test
 
 	sequence1 = Sequence(['c1','c#1','d1','d#1','e1','f1','f#1','g1','g#1','a1','a#1','b1'])
-	print(sequence1.__data__)
+	print(sequence1.string_to_note())
 	sequence2 = Sequence(['g#4','c5','f4'])
 
 	# output_list = mido.get_output_names()
@@ -657,11 +668,12 @@ if __name__ == '__main__':
 	with PrintPort() as port:
 		#arp = Arpeggiator(receiver=port)
 		seq = StepSequencer(receiver=port)
-		seq.division = 1
-		seq.sequence = Sequence([(60,),(72,)])
+		seq.division = 16
+		seq.sequence = sequence1.string_to_note()
 		seq.start()
 		#arp.start()
 		time.sleep(5)
+		seq.stop()
 		#arp.chord = 'dmaj'
 		# time.sleep(5)
 		#arp.chord = 'd#sus2'
