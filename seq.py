@@ -207,20 +207,6 @@ scale_chords_abs = {
 	),
 }
 
-
-def _make_scale_chords():
-	#this code was used to compute the scale_chords dict
-	scale_chords = {}
-	for name, scale in scale_names.items():
-		scale = scale+scale[0:4]
-	    chord_list = []
-	    for i, step in enumerate(scale):
-	        if i <= 6:
-	            chord_list.append((0,scale[i+2]-scale[i],scale[i+5]-scale[i]))
-	scale_chords[name] = tuple(chord_list)
-	return scale_chords
-
-
 PPQN = 24
 
 
@@ -542,6 +528,7 @@ class Arpeggiator(Sequencer):
 		)
 		self.rhythm = [True]
 		self.chord = 'cdim7'
+		self._sequence = Sequence(self._create_sequence())
 
 	@classmethod
 	def _from_val_to_notename(cls, val):
