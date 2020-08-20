@@ -386,7 +386,10 @@ class Timer(metaclass=Singleton):
 
 class Sequencer(mido.ports.BaseOutput):
 	"""
-	A sequencer plays back sequences to a MIDI device.
+	This is a step sequencer which plays back sequences to a MIDI device. It
+	plays those sequences one step at a time, where one step may contain
+	multiple notes. All notes of a step will be sent simultaneously which
+	allows to play chords.
 	"""
 	def __init__(
 		self,
@@ -429,8 +432,6 @@ class Sequencer(mido.ports.BaseOutput):
 		if self._running:
 			if msg.type == 'clock':
 				self.clock_callback()
-			elif msg.type == 'note_on' or msg.type == 'note_off':
-				self.note_callback(msg)
 
 	def clock_callback(self):
 		with self.__lock:
@@ -599,6 +600,12 @@ class Arpeggiator(Sequencer):
 
 		return Sequence(notelist)
 
+class PrintPort(mido.ports.BaseOutput):
+	def __init__(self):
+		super().__init__()
+	def _send(self, msg):
+		print(msg)
+
 if __name__ == '__main__':
 	##TODO: this should be a test
 
@@ -606,15 +613,18 @@ if __name__ == '__main__':
 	print(sequence1.__data__)
 	sequence2 = Sequence(['g#4','c5','f4'])
 
-	output_list = mido.get_output_names()
-	print('Select the target port:')
-	for num, name in enumerate(output_list):
-		print('{num}: {name}'.format(num=num, name=name))
+	# output_list = mido.get_output_names()
+	# print('Select the target port:')
+	# for num, name in enumerate(output_list):
+	# 	print('{num}: {name}'.format(num=num, name=name))
+	#
+	# port = int(input('(seq) '))
 
-	port = int(input('(seq) '))
-
-	with mido.open_output(output_list[port]) as synth:
-		arp = Arpeggiator(synth)
+	with PrintPort() as port:
+		arp = Arpeggiator(receiver=port)
+		seq = Sequencer(receiver=arp)
+		seq.division = 1
+		seq.sequence = Sequence([(60,),(72,)])
 		arp.start()
 		time.sleep(5)
 		arp.chord = 'dmaj'
