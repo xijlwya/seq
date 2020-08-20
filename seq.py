@@ -53,30 +53,30 @@ class Sequence(collections.abc.MutableSequence):
 		self._lock = threading.Lock()
 		self.reset()
 		self.__data__ = [0]*len(self.data)
-		for pos, note in enumerate(self.data)
+		for pos, note in enumerate(self.data):
 			self.__data__[pos] = self._numerize(note)
 
 	def _numerize(self, note):
 		#expects a note string with chord notes separated by spaces
 		#examples: 'c e g', 'c' ,'c# d gb', 'd']
 		chord_list = []
-		for note in notes.split(' '):
-			if note:
-				note_value = note_names[note[0].lower()]
+		for n in note.split(' '):
+			if n:
+				note_value = note_names[n[0].lower()]
 			else:
 				break
 
-			if note[1] == '#' or note[1] == 'b':
-				if note[1] == '#':
+			if n[1] == '#' or n[1] == 'b':
+				if n[1] == '#':
 					note_value += 1
-				elif note[1] == 'b':
+				elif n[1] == 'b':
 					note_value -= 1
-				note_value += 12*(int(note[2:])-4)
+				note_value += 12*(int(n[2:])-4)
 				#-4 because c4 is the middle c, MIDI note 60
 			else:
-				note_value += 12*(int(note[1:])-4)
+				note_value += 12*(int(n[1:])-4)
 			chord_list.append(note_value)
-		return tuple(note_list)
+		return tuple(chord_list)
 
 
 	def __len__(self):
@@ -270,7 +270,7 @@ class Sequencer(mido.ports.BaseOutput):
 
 		if notes:
 		#note_to_midi receives None when a sequence skips a beat
-			for note in notes
+			for note in notes:
 				message_list.append(
 					mido.Message(
 						msg_type,
@@ -348,7 +348,7 @@ class Arpeggiator(Sequencer):
 			step=1
 		)
 		self.rhythm = [True]
-		self.chord = 'cmin7'
+		self.chord = 'cdim7'
 
 	@classmethod
 	def _from_val_to_notename(cls, val):
@@ -382,25 +382,22 @@ class Arpeggiator(Sequencer):
 		notelist = []
 
 		try:
- 			tup = chord_names[_chord_modifier]
+ 			chord_semitones = chord_names[_chord_modifier]
 		except KeyError:
-			tup = chord_names['maj']
+			chord_semitones = chord_names['maj']
 
-		for semitones in tup:
-			notelist.append(self._from_val_to_notename(note_val + semitones))
+		for semitones in chord_semitones:
+			notelist.append((note_val + semitones,))
 
 		return notelist
-
-
-
-
 
 if __name__ == '__main__':
 	##TODO: this should be a test
 	arp = Arpeggiator()
 	print(arp._create_sequence())
 
-	# sequence1 = Sequence(['f3','g#3','c4'])
+	sequence1 = Sequence(['c1','c#1','d1','d#1','e1','f1','f#1','g1','g#1','a1','a#1','b1'])
+	print(sequence1.__data__)
 	# sequence2 = Sequence(['g#4','c5','f4'])
 	#
 	# output_list = mido.get_output_names()
