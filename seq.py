@@ -223,8 +223,13 @@ class Sequence(collections.abc.MutableSequence):
 		self._lock = threading.Lock()
 		self.reset()
 		self.__data__ = [0]*len(self.data)
-		for pos, note in enumerate(self.data):
-			self.__data__[pos] = self._numerize(note)
+		for pos, note_tuple in enumerate(self.data):
+			if isinstance(note_tuple, str):
+				self.__data__[pos] = self._numerize(note_tuple)
+			else:
+				self.__data__[pos] = note_tuple
+
+
 
 	def _numerize(self, note):
 		#expects a note string with chord notes separated by spaces
@@ -520,7 +525,6 @@ class Arpeggiator(Sequencer):
 	##TODO: Sequencer and Arpeggiator should inherit from a common base class
 	def __init__(self, receiver=None):
 		super().__init__(
-			sequence=Sequence([]),
 			receiver=receiver,
 			division=16,
 			channel=1,
@@ -528,7 +532,16 @@ class Arpeggiator(Sequencer):
 		)
 		self.rhythm = [True]
 		self.chord = 'cdim7'
-		self._sequence = Sequence(self._create_sequence())
+		self.sequence = self._create_sequence()
+
+	@property
+	def chord(self):
+		return self._chord
+
+	@chord.setter
+	def chord(self, chord):
+		self._chord = chord
+		self.sequence = self._create_sequence()
 
 	@classmethod
 	def _from_val_to_notename(cls, val):
@@ -570,25 +583,31 @@ class Arpeggiator(Sequencer):
 			notelist.append((note_val + semitones,))
 			#to return a list of tuples
 
-		return notelist
+		return Sequence(notelist)
 
 if __name__ == '__main__':
 	##TODO: this should be a test
-	arp = Arpeggiator()
-	print(arp._create_sequence())
 
 	sequence1 = Sequence(['c1','c#1','d1','d#1','e1','f1','f#1','g1','g#1','a1','a#1','b1'])
 	print(sequence1.__data__)
-	# sequence2 = Sequence(['g#4','c5','f4'])
-	#
-	# output_list = mido.get_output_names()
-	# print('Select the target port:')
-	# for num, name in enumerate(output_list):
-	# 	print('{num}: {name}'.format(num=num, name=name))
-	#
-	# port = int(input('(seq)'))
-	#
-	# with mido.open_output(output_list[port]) as synth:
+	sequence2 = Sequence(['g#4','c5','f4'])
+
+	output_list = mido.get_output_names()
+	print('Select the target port:')
+	for num, name in enumerate(output_list):
+		print('{num}: {name}'.format(num=num, name=name))
+
+	port = int(input('(seq) '))
+
+	with mido.open_output(output_list[port]) as synth:
+		arp = Arpeggiator(synth)
+		arp.start()
+		time.sleep(5)
+		arp.chord = 'dmaj'
+		time.sleep(5)
+		arp.chord = 'd#sus2'
+		time.sleep(5)
+		arp.stop()
 	# 	seq1 = Sequencer(sequence=sequence1, receiver=synth)
 	# 	seq2 = Sequencer(sequence=sequence2, receiver=synth)
 	# 	seq1.start()
