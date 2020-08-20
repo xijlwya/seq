@@ -604,18 +604,6 @@ class Arpeggiator(BaseSequencer):
 		self._chord = chord
 		self.sequence = self._create_sequence()
 
-	@classmethod
-	def _from_val_to_notename(cls, val):
-		##TODO: how the hell do I get the right note --> c# == db in this
-		for k,v in note_names.items():
-			if v == val:
-				return k
-			elif v+1 == val:
-				return k+'#'
-			elif v-1 == val:
-				return k+'b'
-
-
 	def _create_sequence(self):
 		#translates the chord to notes like 'c#'', 'd', etc.'
 		if self.chord[1] == '#' or self.chord[1] == 'b':
