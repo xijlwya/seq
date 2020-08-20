@@ -43,7 +43,7 @@ scale_chords_rel = {
 	'lydian':(
 		(0, 4, 7),
 		(0, 3, 7),
-		(0, 3, 6),
+		(0, 3, 6), #dim
 		(0, 4, 7),
 		(0, 3, 7),
 		(0, 3, 7),
@@ -56,12 +56,12 @@ scale_chords_rel = {
 		(0, 4, 7),
 		(0, 4, 7),
 		(0, 3, 7),
-		(0, 3, 6),
+		(0, 3, 6), #dim
 	),
 	'mixolydian':(
 		(0, 4, 7),
 		(0, 3, 7),
-		(0, 3, 6),
+		(0, 3, 6), #dim
 		(0, 4, 7),
 		(0, 3, 7),
 		(0, 3, 7),
@@ -73,12 +73,12 @@ scale_chords_rel = {
 		(0, 4, 7),
 		(0, 4, 7),
 		(0, 3, 7),
-		(0, 3, 6),
+		(0, 3, 6), #dim
 		(0, 4, 7),
 	),
 	'aeolian':(
 		(0, 3, 7),
-		(0, 3, 6),
+		(0, 3, 6), #dim
 		(0, 4, 7),
 		(0, 3, 7),
 		(0, 3, 7),
@@ -90,12 +90,12 @@ scale_chords_rel = {
 		(0, 4, 7),
 		(0, 4, 7),
 		(0, 3, 7),
-		(0, 3, 6),
+		(0, 3, 6), #dim
 		(0, 4, 7),
 		(0, 3, 7),
 	),
 	'locrian':(
-		(0, 3, 6),
+		(0, 3, 6), #dim
 		(0, 4, 7),
 		(0, 3, 7),
 		(0, 3, 7),
@@ -525,6 +525,7 @@ class Sequencer(mido.ports.BaseOutput):
 	@sequence.setter
 	def sequence(self, seq):
 		self._sequence = seq
+		self._seq_iter = iter(seq)
 		self._sequence.step = self.step
 
 	##TODO: set up a sequence property so the new sequence is behaving like the old sequence
