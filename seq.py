@@ -384,12 +384,15 @@ class Timer(metaclass=Singleton):
 		self.receivers.remove(rec)
 
 
-class Sequencer(mido.ports.BaseOutput):
+class BaseSequencer(mido.ports.BaseOutput):
 	"""
 	This is a step sequencer which plays back sequences to a MIDI device. It
 	plays those sequences one step at a time, where one step may contain
 	multiple notes. All notes of a step will be sent simultaneously which
 	allows to play chords.
+
+	The Sequencer needs to receive MIDI clock messages from a clock source.
+	Without a clock input, it will not advance.
 	"""
 	def __init__(
 		self,
@@ -401,17 +404,16 @@ class Sequencer(mido.ports.BaseOutput):
 	):
 		super().__init__()
 		#for inheriting from BaseOutput
-		self.__lock = threading.Lock()
-		#mido.ports.BaseOutput has a self._lock as well, so this is dundered
 
 		self._running = False
+		self._pulses = 0
 
 		Timer().add_receiver(self)
-
-		self._seq_iter = iter(sequence)
-		self._sequence = sequence
 		self.receiver = receiver
 		#receiver is supposed to be a mido port with a send(msg) method
+
+		self.sequence = sequence
+		self.step = step
 
 		self.division = division
 		#the musical note division,
@@ -423,45 +425,15 @@ class Sequencer(mido.ports.BaseOutput):
 		self.note_length = 0.5
 		#note length is the relative time a note takes of one step
 
-		self._pulses = 0
-		self._step = step
-
-
 	def _send(self, msg):
-		#inherited from mido.BaseOutput
-		if self._running:
-			if msg.type == 'clock':
-				self.clock_callback()
-
-	def clock_callback(self):
-		with self.__lock:
-		#TODO: has all of this to be locked? Can a subset be savely locked?
-			if self._pulses == 0:
-				self._current_step = next(self._seq_iter)
-
-				for note in self.note_to_midi(
-					self._current_step,
-					channel=self.channel
-				):
-					self.receiver.send(note)
-				self._pulses += 1
-
-			elif self._pulses == round(self._pulse_limit*self.note_length):
-				for note in self.note_to_midi(
-					self._current_step,
-					msg_type='note_off',
-					channel=self.channel
-				):
-					self.receiver.send(note)
-				self._pulses = 0
-
-			else:
-				self._pulses += 1
+		#inherited from mido.ports.Baseport
+		#here the Sequencer receives MIDI messages
+		raise NotImplementedError
 
 	@classmethod
 	def note_to_midi(cls, notes, msg_type='note_on', channel=1, velocity=127):
 		"""
-		Converts tuples of integers to MIDI Note messages
+		Converts tuples of integers to a list of mido.Message
 		"""
 		message_list = []
 
@@ -479,10 +451,6 @@ class Sequencer(mido.ports.BaseOutput):
 				)
 
 		return message_list
-
-	def note_callback(self, msg):
-		pass
-		#TODO: transpose
 
 	def stop(self):
 		self.receiver.reset()
@@ -536,18 +504,96 @@ class Sequencer(mido.ports.BaseOutput):
 
 	##TODO: set up a sequence property so the new sequence is behaving like the old sequence
 
-class Arpeggiator(Sequencer):
+
+class StepSequencer(BaseSequencer):
+	def __init__(
+		self,
+		sequence=Sequence([]),
+		receiver=None,
+		division=16,
+		channel=1,
+		step=1
+	):
+		super().__init__(sequence,receiver,division,channel,step)
+
+	def _send(self, msg):
+		#overwritten from BaseSequencer
+		if self._running:
+			if msg.type == 'clock':
+				self.clock_callback()
+
+	def clock_callback(self):
+		with self._lock:
+		#self._lock is inherited from mido.ports.BaseOutput
+		#TODO: has all of this to be locked? Can a subset be savely locked?
+			if self._pulses == 0:
+				self._current_step = next(self._seq_iter)
+
+				for note in self.note_to_midi(
+					self._current_step,
+					channel=self.channel
+				):
+					self.receiver.send(note)
+				self._pulses += 1
+
+			elif self._pulses == round(self._pulse_limit*self.note_length):
+				for note in self.note_to_midi(
+					self._current_step,
+					msg_type='note_off',
+					channel=self.channel
+				):
+					self.receiver.send(note)
+				self._pulses = 0
+
+			else:
+				self._pulses += 1
+
+
+
+class Arpeggiator(BaseSequencer):
 	##TODO: Sequencer and Arpeggiator should inherit from a common base class
-	def __init__(self, receiver=None):
+	def __init__(self, receiver=None, channel=1):
 		super().__init__(
 			receiver=receiver,
 			division=16,
-			channel=1,
+			channel=channel,
 			step=1
 		)
 		self.rhythm = [True]
 		self.chord = 'cdim7'
 		self.sequence = self._create_sequence()
+
+	def _send(self, msg):
+		#inherited from BaseSequencer
+		if self._running:
+			if msg.type == 'clock':
+				self.clock_callback()
+
+	def clock_callback(self):
+		with self._lock:
+		#self._lock is inherited from mido.ports.BaseOutput
+		#TODO: has all of this to be locked? Can a subset be savely locked?
+			if self._pulses == 0:
+				self._current_step = next(self._seq_iter)
+
+				for note in self.note_to_midi(
+					self._current_step,
+					channel=self.channel
+				):
+					self.receiver.send(note)
+				self._pulses += 1
+
+			elif self._pulses == round(self._pulse_limit*self.note_length):
+				for note in self.note_to_midi(
+					self._current_step,
+					msg_type='note_off',
+					channel=self.channel
+				):
+					self.receiver.send(note)
+				self._pulses = 0
+
+			else:
+				self._pulses += 1
 
 	@property
 	def chord(self):
@@ -621,17 +667,18 @@ if __name__ == '__main__':
 	# port = int(input('(seq) '))
 
 	with PrintPort() as port:
-		arp = Arpeggiator(receiver=port)
-		seq = Sequencer(receiver=arp)
+		#arp = Arpeggiator(receiver=port)
+		seq = StepSequencer(receiver=port)
 		seq.division = 1
 		seq.sequence = Sequence([(60,),(72,)])
-		arp.start()
+		seq.start()
+		#arp.start()
 		time.sleep(5)
-		arp.chord = 'dmaj'
-		time.sleep(5)
-		arp.chord = 'd#sus2'
-		time.sleep(5)
-		arp.stop()
+		#arp.chord = 'dmaj'
+		# time.sleep(5)
+		#arp.chord = 'd#sus2'
+		# time.sleep(5)
+		# arp.stop()
 	# 	seq1 = Sequencer(sequence=sequence1, receiver=synth)
 	# 	seq2 = Sequencer(sequence=sequence2, receiver=synth)
 	# 	seq1.start()
