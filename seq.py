@@ -296,6 +296,9 @@ class Sequence(collections.abc.MutableSequence):
 	def __iter__(self):
 		return self._iter
 
+	def __next__(self):
+		return next(self._iter)
+
 	def _traverse(self):
 		cur = 0 		#cursor position
 		dir = self.step	#step direction
@@ -331,6 +334,9 @@ class Sequence(collections.abc.MutableSequence):
 			self._iter.send(val)
 		else:
 			raise ValueError('step cannot be zero!')
+
+	def once(self):
+		return list(self.__data__)
 
 
 class Singleton(type):
@@ -574,8 +580,8 @@ class Arpeggiator(BaseSequencer):
 			channel=channel,
 			step=1
 		)
-		self.rhythm = [True]
-		self.chord = 'cdim7'
+		self.rhythm = Sequence([True, True, True, False,])
+		self.chords = Sequence(['cmin','d#maj','gmin'])
 		self.sequence = self._create_sequence()
 
 	def _send(self, msg):
@@ -611,43 +617,53 @@ class Arpeggiator(BaseSequencer):
 				self._pulses += 1
 
 	@property
-	def chord(self):
-		return self._chord
+	def chords(self):
+		return self._chords
 
-	@chord.setter
-	def chord(self, chord):
-		self._chord = chord
+	@chords.setter
+	def chords(self, chords):
+		self._chords = chords
 		self.sequence = self._create_sequence()
 
 	def _create_sequence(self):
 		#translates the chord to notes like 'c#'', 'd', etc.'
-		if self.chord[1] == '#' or self.chord[1] == 'b':
-			_root_note = self.chord[:2].lower()
-			_chord_modifier = self.chord[2:].lower()
-		else:
-			_root_note = self.chord[:1].lower()
-			_chord_modifier = self.chord[1:].lower()
+
+		arp_seq = []
+		for chord in self.chords.once():
+			if chord[1] == '#' or chord[1] == 'b':
+				_root_note = chord[:2].lower()
+				_chord_modifier = chord[2:].lower()
+			else:
+				_root_note = chord[:1].lower()
+				_chord_modifier = chord[1:].lower()
 
 
-		note_val = note_names[_root_note[0]]
-		if len(_root_note) == 2:
-			if _root_note[1] == '#':
-				note_val += 1
-			elif _root_note[1] == 'b':
-				note_val -= 1
+			note_val = note_names[_root_note[0]]
+			if len(_root_note) == 2:
+				if _root_note[1] == '#':
+					note_val += 1
+				elif _root_note[1] == 'b':
+					note_val -= 1
 
-		notelist = []
+			notelist = []
 
-		try:
- 			chord_semitones = chord_names[_chord_modifier]
-		except KeyError:
-			chord_semitones = chord_names['maj']
+			try:
+				chord_semitones = chord_names[_chord_modifier]
+			except KeyError:
+				chord_semitones = chord_names['maj']
 
-		for semitones in chord_semitones:
-			notelist.append((note_val + semitones,))
-			#to return a list of tuples
+			for semitones in chord_semitones:
+				notelist.append(note_val + semitones)
 
-		return Sequence(notelist)
+			chord_seq = Sequence(notelist)
+
+			for beat in self.rhythm.once():
+				if beat:
+					arp_seq.append((next(chord_seq),))
+				else:
+					arp_seq.append(tuple())
+
+		return Sequence(arp_seq)
 
 class PrintPort(mido.ports.BaseOutput):
 	def __init__(self):
@@ -662,27 +678,28 @@ if __name__ == '__main__':
 	print(sequence1.string_to_note())
 	sequence2 = Sequence(['g#4','c5','f4'])
 
-	# output_list = mido.get_output_names()
-	# print('Select the target port:')
-	# for num, name in enumerate(output_list):
-	# 	print('{num}: {name}'.format(num=num, name=name))
-	#
-	# port = int(input('(seq) '))
+	output_list = mido.get_output_names()
+	print('Select the target port:')
+	for num, name in enumerate(output_list):
+		print('{num}: {name}'.format(num=num, name=name))
 
-	with PrintPort() as port:
-		#arp = Arpeggiator(receiver=port)
-		seq = StepSequencer(receiver=port)
-		seq.division = 16
-		seq.sequence = sequence1.string_to_note()
-		seq.start()
-		#arp.start()
-		time.sleep(5)
-		seq.stop()
+	port = int(input('(seq) '))
+
+	with mido.open_output(mido.get_output_names()[port]) as port:
+		Timer().tempo = 160
+		arp = Arpeggiator(receiver=port)
+		# seq = StepSequencer(receiver=port)
+		# seq.division = 16
+		# seq.sequence = sequence1.string_to_note()
+		# seq.start()
+		arp.start()
+		time.sleep(30)
+		# seq.stop()
 		#arp.chord = 'dmaj'
 		# time.sleep(5)
 		#arp.chord = 'd#sus2'
 		# time.sleep(5)
-		# arp.stop()
+		arp.stop()
 	# 	seq1 = Sequencer(sequence=sequence1, receiver=synth)
 	# 	seq2 = Sequencer(sequence=sequence2, receiver=synth)
 	# 	seq1.start()
