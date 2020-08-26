@@ -211,7 +211,7 @@ class BaseSequencer(mido.ports.BaseOutput):
 
 	@note_length.setter
 	def note_length(self, val):
-		if 0 <= val <= 1.0:
+		if 0 <= val <= 1.0 and round(self._pulse_limit*val) > 0:
 			self._note_length = val
 		else:
 			raise ValueError('Invalid note length: '+str(val))
@@ -416,11 +416,34 @@ if __name__ == '__main__':
 				NoteList.string_to_note(seq)
 
 		def test_Sequencer(self):
-			seq = BaseSequencer(sequenceself.allNotesSequence, receiver=self.port)
-			seq._send() = lambda x:None
-			with self.assertRfor elem in seq.sequence:
-				seq.advance()
-			seq.advance()
+			def _work(obj):
+				for elem in obj.sequence:
+					obj.advance()
+				obj.advance()
+				#this would raise some error if implementation of advance was broken
+
+				obj.start()
+				with self.assertRaises(ValueError):
+					obj.division = 2**12
+				obj.division = 1
+				with self.assertRaises(ValueError):
+					obj.division = 0
+				obj.note_length = 0.1
+				obj.note_length = 1.0
+				with self.assertRaises(ValueError):
+					obj.note_length = 1.01
+				with self.assertRaises(ValueError):
+					obj.note_length = 0.0
+				with self.assertRaises(ValueError):
+					obj.note_length = 0.001
+				obj.stop()
+
+			baseseq = BaseSequencer(sequence=self.allNotesSequence, receiver=self.port)
+			seq = StepSequencer(sequence=self.allNotesSequence, receiver=self.port)
+			baseseq._send = lambda x:None
+			#because Timer would trigger the NotImplementedError when it sends
+			_work(baseseq)
+			_work(seq)
 
 
 
