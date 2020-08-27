@@ -2,6 +2,7 @@ import mido
 import time
 import random
 import threading
+import itertools
 
 from seq_data import *
 #imports several note value dicts and CONSTANTS
@@ -261,6 +262,45 @@ class StepSequencer(BaseSequencer):
 
 			else:
 				self._pulses += 1
+
+		def _euclid(self, seq_length, num_beats):
+			def flatten(l, ltypes=(list, tuple)):
+			#from http://rightfootin.blogspot.com/2006/09/more-on-python-flatten.html
+			ltype = type(l)
+			l = list(l)
+			i = 0
+			while i < len(l):
+				while isinstance(l[i], ltypes):
+					if not l[i]:
+						l.pop(i)
+						i -= 1
+						break
+					else:
+						l[i:i + 1] = l[i]
+				i += 1
+			return ltype(l)
+
+			#------
+			
+			l = [1]*num_beats
+			r = [0]*(seq_length - num_beats)
+
+			while len(r) > 1:
+				new_l = []
+				new_r = []
+
+				for tup in itertools.zip_longest(l, r, fillvalue=None):
+					if None in tup:
+						val = list(tup)
+						val.remove(None)
+						new_r.append(val)
+					else:
+						new_l.append(list(tup))
+
+				l = new_l
+				r = new_r
+
+			return flatten(l+r)
 
 
 
