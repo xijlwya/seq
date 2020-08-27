@@ -266,22 +266,22 @@ class StepSequencer(BaseSequencer):
 		def _euclid(self, seq_length, num_beats):
 			def flatten(l, ltypes=(list, tuple)):
 			#from http://rightfootin.blogspot.com/2006/09/more-on-python-flatten.html
-			ltype = type(l)
-			l = list(l)
-			i = 0
-			while i < len(l):
-				while isinstance(l[i], ltypes):
-					if not l[i]:
-						l.pop(i)
-						i -= 1
-						break
-					else:
-						l[i:i + 1] = l[i]
-				i += 1
-			return ltype(l)
+				ltype = type(l)
+				l = list(l)
+				i = 0
+				while i < len(l):
+					while isinstance(l[i], ltypes):
+						if not l[i]:
+							l.pop(i)
+							i -= 1
+							break
+						else:
+							l[i:i + 1] = l[i]
+					i += 1
+				return ltype(l)
 
 			#------
-			
+
 			l = [1]*num_beats
 			r = [0]*(seq_length - num_beats)
 
@@ -301,7 +301,6 @@ class StepSequencer(BaseSequencer):
 				r = new_r
 
 			return flatten(l+r)
-
 
 
 class Arpeggiator(BaseSequencer):
@@ -404,7 +403,6 @@ class Arpeggiator(BaseSequencer):
 					arp_seq.append(tuple())
 
 		return arp_seq
-
 
 
 if __name__ == '__main__':

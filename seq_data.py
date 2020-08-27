@@ -215,4 +215,5 @@ scale_chords_abs = {
 	),
 }
 
+# --- CONSTANTS ---
 PPQN = 24
