@@ -12,7 +12,7 @@ class NoteList:
 	def _string_to_note(cls, note):
 		#helper method
 		#expects a note string with chord notes separated by spaces
-		#examples: 'c e g', 'c' ,'c# d gb', 'd']
+		#examples: 'c3 e3 g3', 'c1' ,'c#4 d5 gb6', 'd2']
 		chord_list = []
 		for n in note.split(' '):
 			if n:
@@ -33,11 +33,72 @@ class NoteList:
 		return tuple(chord_list)
 
 	@classmethod
-	def string_to_note(cls, seq):
-		note_list = []
-		for string in seq:
-			note_list.append(cls._string_to_note(string))
-		return note_list
+	def string_to_note(cls, notes):
+		if isinstance(notes, list):
+			note_list = []
+			for string in notes:
+				note_list.append(cls._string_to_note(string))
+			return note_list
+		else:
+			return cls._string_to_note(notes)
+
+	@classmethod
+	def scale(cls, rootnote, name, octaves=(4,)):
+		#this method will read octaves as an iterator, allowing for custom
+		#sequences of octaves such as (4,5,4,3)
+		base_notes = []
+		octaves = list(octaves)
+		#so the user can input e.g. octaves=3 to obtain a single octave
+		for oct in octaves:
+			base_notes.append(rootnote.lower() + str(oct))
+		notes = []
+		for root in base_notes:
+			for note in cls._notes_of_scale(root, name.lower()):
+				notes.append(note)
+		return notes
+
+	@classmethod
+	def chord(cls, rootnote, scale, degree_w_mod):
+		for rom in roman_priolist:
+			if degree_w_mod.lower().startswith(rom):
+				degree_num = roman_num[rom]
+				break
+		mod = degree_w_mod[len(rom):]
+
+		resultchord = []
+		root = cls.string_to_note(rootnote)
+
+		if mod:
+		##TODO: the modifier will overwrite the diatonic chord:
+		#if you put in 'VII7' it will always be a major chord with a minor seven
+			for semitone in chord_names[mod]:
+				resultchord.append(root + semitone)
+		else:
+			for semitone in scale_chords_abs[scale][degree_num]:
+				resultchord.append(root + semitone)
+		return tuple(resultchord)
+
+
+	@classmethod
+	def _base_note_string(cls, base_note_str):
+		base_note = cls.string_to_note(base_note_str)
+		if len(base_note) > 1:
+			raise ValueError(base_note_str + ' invalid base note for a scale (probably a chord?)')
+		else:
+			return base_note[0]
+
+	@classmethod
+	def _notes_of_scale(cls, base_note_str, scale):
+		base_note = cls._base_note_string(base_note_str)
+		scale_notes = scale_names[scale]
+		return [base_note + note for note in scale_notes]
+
+	@classmethod
+	def _chord_degree(cls, base_note_str, scale, degree):
+		base_note = cls._base_note_string(base_note_str)
+		deg = roman_num[degree.lower()]
+		notes = scale_chords_abs[scale][deg]
+		return tuple(base_note + note for note in notes)
 
 
 class Singleton(type):
@@ -263,44 +324,46 @@ class StepSequencer(BaseSequencer):
 			else:
 				self._pulses += 1
 
-		def _euclid(self, seq_length, num_beats):
-			def flatten(l, ltypes=(list, tuple)):
-			#from http://rightfootin.blogspot.com/2006/09/more-on-python-flatten.html
-				ltype = type(l)
-				l = list(l)
-				i = 0
-				while i < len(l):
-					while isinstance(l[i], ltypes):
-						if not l[i]:
-							l.pop(i)
-							i -= 1
-							break
-						else:
-							l[i:i + 1] = l[i]
-					i += 1
-				return ltype(l)
 
-			#------
 
-			l = [1]*num_beats
-			r = [0]*(seq_length - num_beats)
-
-			while len(r) > 1:
-				new_l = []
-				new_r = []
-
-				for tup in itertools.zip_longest(l, r, fillvalue=None):
-					if None in tup:
-						val = list(tup)
-						val.remove(None)
-						new_r.append(val)
+	def _euclid(self, seq_length, num_beats):
+		def flatten(l, ltypes=(list, tuple)):
+		#from http://rightfootin.blogspot.com/2006/09/more-on-python-flatten.html
+			ltype = type(l)
+			l = list(l)
+			i = 0
+			while i < len(l):
+				while isinstance(l[i], ltypes):
+					if not l[i]:
+						l.pop(i)
+						i -= 1
+						break
 					else:
-						new_l.append(list(tup))
+						l[i:i + 1] = l[i]
+				i += 1
+			return ltype(l)
 
-				l = new_l
-				r = new_r
+		#------
 
-			return flatten(l+r)
+		l = [1]*num_beats
+		r = [0]*(seq_length - num_beats)
+
+		while len(r) > 1:
+			new_l = []
+			new_r = []
+
+			for tup in itertools.zip_longest(l, r, fillvalue=None):
+				if None in tup:
+					val = list(tup)
+					val.remove(None)
+					new_r.append(val)
+				else:
+					new_l.append(list(tup))
+
+			l = new_l
+			r = new_r
+
+		return flatten(l+r)
 
 
 class Arpeggiator(BaseSequencer):
@@ -453,6 +516,12 @@ if __name__ == '__main__':
 			with self.assertRaises(AttributeError):
 				NoteList.string_to_note(seq)
 
+			for scale in scale_names.keys():
+				for note in note_names.keys():
+					for octave in range(1,10):
+						for offset in ('','#','b'):
+							NoteList.scale(note+offset, scale, octaves=(octave,))
+
 		def test_Sequencer(self):
 			def _work(obj):
 				for elem in obj.sequence:
@@ -482,7 +551,6 @@ if __name__ == '__main__':
 			#because Timer would trigger the NotImplementedError when it sends
 			_work(baseseq)
 			_work(seq)
-
 
 
 	unittest.main(verbosity=2)

@@ -47,6 +47,18 @@ scale_names = {
 	'minor'		:(0, 2, 3, 5, 7, 8, 10), #same as aeolian
 }
 
+roman_num = {
+	'i':	0,
+	'ii':	1,
+	'iii':	2,
+	'iv':	3,
+	'v':	4,
+	'vi':	5,
+	'vii':	6,
+}
+
+roman_priolist = ['iii','ii','iv','i','vii','vi','v']
+
 scale_chords_rel = {
 	'lydian':(
 		(0, 4, 7),
