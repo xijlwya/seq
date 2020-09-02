@@ -214,7 +214,9 @@ class BaseSequencer(mido.ports.BaseOutput):
 	def _send(self, msg):
 		#inherited from mido.ports.Baseport
 		#here the Sequencer receives MIDI messages
-		raise NotImplementedError
+		if self._running:
+			if msg.type == 'clock':
+				self.clock_callback()
 
 	@classmethod
 	def note_to_midi(cls, notes, msg_type='note_on', channel=1, velocity=127):
@@ -237,6 +239,33 @@ class BaseSequencer(mido.ports.BaseOutput):
 				)
 
 		return message_list
+
+	def clock_callback(self):
+		with self._lock:
+		#self._lock is inherited from mido.ports.BaseOutput
+		#TODO: has all of this to be locked? Can a subset be savely locked?
+			if self._pulses == 0:
+				self._current_step = self.advance()
+
+				for note in self.note_to_midi(
+					self._current_step,
+					channel=self.channel
+				):
+					self.receiver.send(note)
+
+				self._pulses += 1
+
+			elif self._pulses == round(self._pulse_limit*self.note_length):
+				for note in self.note_to_midi(
+					self._current_step,
+					msg_type='note_off',
+					channel=self.channel
+				):
+					self.receiver.send(note)
+				self._pulses = 0
+
+			else:
+				self._pulses += 1
 
 	def stop(self):
 		self._running = False
@@ -297,34 +326,6 @@ class StepSequencer(BaseSequencer):
 			if msg.type == 'clock':
 				self.clock_callback()
 
-	def clock_callback(self):
-		with self._lock:
-		#self._lock is inherited from mido.ports.BaseOutput
-		#TODO: has all of this to be locked? Can a subset be savely locked?
-			if self._pulses == 0:
-				self._current_step = self.advance()
-
-				for note in self.note_to_midi(
-					self._current_step,
-					channel=self.channel
-				):
-					self.receiver.send(note)
-				self._pulses += 1
-
-			elif self._pulses == round(self._pulse_limit*self.note_length):
-				for note in self.note_to_midi(
-					self._current_step,
-					msg_type='note_off',
-					channel=self.channel
-				):
-					self.receiver.send(note)
-				self._pulses = 0
-
-			else:
-				self._pulses += 1
-
-
-
 	def _euclid(self, seq_length, num_beats):
 		def flatten(l, ltypes=(list, tuple)):
 		#from http://rightfootin.blogspot.com/2006/09/more-on-python-flatten.html
@@ -376,39 +377,6 @@ class MetaSequencer(BaseSequencer):
 	):
 		super().__init__(sequence,receiver,division,channel,step)
 
-	def _send(self, msg):
-		if self._running:
-			if msg.type == 'clock':
-				self.clock_callback()
-
-	def clock_callback(self):
-		with self._lock:
-		#self._lock is inherited from mido.ports.BaseOutput
-		#TODO: has all of this to be locked? Can a subset be savely locked?
-			if self._pulses == 0:
-				self._current_step = self.advance()
-
-				for note in self.note_to_midi(
-					self._current_step,
-					channel=self.channel
-				):
-					self.receiver.send(note)
-
-				self._pulses += 1
-
-			elif self._pulses == round(self._pulse_limit*self.note_length):
-				for note in self.note_to_midi(
-					self._current_step,
-					msg_type='note_off',
-					channel=self.channel
-				):
-					self.receiver.send(note)
-				self._pulses = 0
-
-			else:
-				self._pulses += 1
-
-
 class SequencerGroup(BaseSequencer):
 	def __init__(
 		self,
@@ -430,7 +398,6 @@ class SequencerGroup(BaseSequencer):
 		self._group.append(seq)
 
 class Arpeggiator(BaseSequencer):
-	##TODO: Sequencer and Arpeggiator should inherit from a common base class
 	def __init__(self, receiver=None, channel=1):
 		super().__init__(
 			receiver=receiver,
@@ -447,32 +414,6 @@ class Arpeggiator(BaseSequencer):
 		if self._running:
 			if msg.type == 'clock':
 				self.clock_callback()
-
-	def clock_callback(self):
-		with self._lock:
-		#self._lock is inherited from mido.ports.BaseOutput
-		#TODO: has all of this to be locked? Can a subset be savely locked?
-			if self._pulses == 0:
-				self._current_step = self.advance()
-
-				for note in self.note_to_midi(
-					self._current_step,
-					channel=self.channel
-				):
-					self.receiver.send(note)
-				self._pulses += 1
-
-			elif self._pulses == round(self._pulse_limit*self.note_length):
-				for note in self.note_to_midi(
-					self._current_step,
-					msg_type='note_off',
-					channel=self.channel
-				):
-					self.receiver.send(note)
-				self._pulses = 0
-
-			else:
-				self._pulses += 1
 
 	@property
 	def chords(self):
