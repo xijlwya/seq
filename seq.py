@@ -3,6 +3,7 @@ import time
 import random
 import threading
 import itertools
+import json
 
 from seq_data import *
 #imports several note value dicts and CONSTANTS
@@ -217,6 +218,10 @@ class BaseSequencer(mido.ports.BaseOutput):
 		if self._running:
 			if msg.type == 'clock':
 				self.clock_callback()
+			elif msg.type = 'sysex':
+				sent_dict = json.loads(bytes(msg.data))
+				for att, val in sent_dict:
+					setattr(self, att, val)
 
 	@classmethod
 	def note_to_midi(cls, notes, msg_type='note_on', channel=1, velocity=127):
@@ -320,12 +325,6 @@ class StepSequencer(BaseSequencer):
 	):
 		super().__init__(sequence,receiver,division,channel,step)
 
-	def _send(self, msg):
-		#overwritten from BaseSequencer
-		if self._running:
-			if msg.type == 'clock':
-				self.clock_callback()
-
 	def _euclid(self, seq_length, num_beats):
 		def flatten(l, ltypes=(list, tuple)):
 		#from http://rightfootin.blogspot.com/2006/09/more-on-python-flatten.html
@@ -377,6 +376,31 @@ class MetaSequencer(BaseSequencer):
 	):
 		super().__init__(sequence,receiver,division,channel,step)
 
+	@classmethod
+	def note_to_midi(cls, notes):
+		#overwritten from BaseSequencer
+		#meta sequencer doesn't deal with musical note values
+		raise NotImplementedError
+
+	def clock_callback(self):
+		with self._lock:
+		#self._lock is inherited from mido.ports.BaseOutput
+		#TODO: has all of this to be locked? Can a subset be savely locked?
+			if self._pulses == 0:
+				self._current_step = self.advance()
+
+				if isinstance(self._current_step, dict):
+					#CRAEFUL: json converts all dictionary key/value pairs to strings!
+					send_bytes = json.dumps(self._current_step).encode(encoding='ascii')
+					msg = mido.Message('sysex', data=send_bytes)
+					#receive this with dict = json.dumps(bytes(msg.data))
+					self.receiver.send(msg)
+
+				self._pulses += 1
+
+			else:
+				self._pulses += 1
+
 class SequencerGroup(BaseSequencer):
 	def __init__(
 		self,
@@ -389,10 +413,6 @@ class SequencerGroup(BaseSequencer):
 		super().__init__(sequencer,	receiver, division,	channel, step)
 		Timer().remove_receiver(self)
 		self._group = []
-
-	def _send(self, msg):
-		for seq in self._group:
-			seq.send(msg)
 
 	def append(self, seq):
 		self._group.append(seq)
@@ -408,12 +428,6 @@ class Arpeggiator(BaseSequencer):
 		self.rhythm = [True, True, True, False,]
 		self.chords = ['cmin','d#maj','gmin']
 		self.sequence = self._create_sequence()
-
-	def _send(self, msg):
-		#inherited from BaseSequencer
-		if self._running:
-			if msg.type == 'clock':
-				self.clock_callback()
 
 	@property
 	def chords(self):
