@@ -402,7 +402,8 @@ class MetaSequencer(BaseSequencer):
 					self.receiver.send(msg)
 
 				self._pulses += 1
-
+			elif self._pulses == self._pulse_limit:
+				self.pulses = 0
 			else:
 				self._pulses += 1
 
@@ -575,13 +576,23 @@ if __name__ == '__main__':
 
 		def test_metaSequencer(self):
 			base = BaseSequencer(sequence=[(x,) for x in [60,61,62,63,64,65]], receiver=self.port)
-			meta = MetaSequencer(receiver=base, sequence=[{'division':8}], division=1)
-			base.start()
+			metaseq = [{'division':8, 'note_length':0.3, 'channel':2}, {'division':12, 'note_length':0.7, 'channel':12}]
+			meta = MetaSequencer(receiver=base, sequence=metaseq, division=1)
+			Timer().remove_receiver(meta)
+			Timer().remove_receiver(base)
 			meta.start()
-			time.sleep(0.1)
-			base.stop()
-			meta.stop()
+			base.start()
+			meta.clock_callback()
 			self.assertTrue(base.division == 8)
+			self.assertTrue(base.note_length == 0.3)
+			self.assertTrue(base.channel == 2)
+			meta._pulses = 0
+			meta.clock_callback()
+			self.assertTrue(base.division == 12)
+			self.assertTrue(base.note_length == 0.7)
+			self.assertTrue(base.channel == 12)
+			meta.stop()
+			base.stop()
 
 
 
