@@ -369,6 +369,32 @@ class StepSequencer(BaseSequencer):
 
 		return flatten(l+r)
 
+	def list_euclidian_sequences(self, seq_length, num_beats):
+		#returns a list of all euclidian sequences of length seq_length with
+		#num_beats beats that start with a beat
+		def math_euclid(a,b):
+			while b != 0:
+				a, b = b, a % b
+			return a
+
+		def shift(seq):
+			for n, e in enumerate(seq):
+				if e == 1:
+					if n == 0:
+						yield seq
+					else:
+						yield seq[n:] + seq[0:n]
+
+		euc = self._euclid(seq_length, num_beats)
+		math_euc = math_euclid(seq_length, num_beats)
+
+		l = []
+		for s in shift(euc):
+			l.append(s)
+		num = len(l)
+		return l[:num//math_euc]
+
+
 
 class MetaSequencer(BaseSequencer):
 	def __init__(
