@@ -218,9 +218,14 @@ class BaseSequencer(mido.ports.BaseOutput):
 		if self._running:
 			if msg.type == 'clock':
 				self.clock_callback()
-			elif msg.type = 'sysex':
-				sent_dict = json.loads(bytes(msg.data))
-				for att, val in sent_dict:
+			elif msg.type == 'sysex':
+				self.sysex_callback(msg.data)
+
+	def sysex_callback(self, data):
+		with self._lock:
+			sent_dict = json.loads(bytes(data))
+			for att, val in sent_dict.items():
+				if hasattr(self, att):
 					setattr(self, att, val)
 
 	@classmethod
@@ -390,7 +395,7 @@ class MetaSequencer(BaseSequencer):
 				self._current_step = self.advance()
 
 				if isinstance(self._current_step, dict):
-					#CRAEFUL: json converts all dictionary key/value pairs to strings!
+					#CAREFUL: json converts all dictionary key/value pairs to strings!
 					send_bytes = json.dumps(self._current_step).encode(encoding='ascii')
 					msg = mido.Message('sysex', data=send_bytes)
 					#receive this with dict = json.dumps(bytes(msg.data))
@@ -565,10 +570,19 @@ if __name__ == '__main__':
 
 			baseseq = BaseSequencer(sequence=self.allNotesSequence, receiver=self.port)
 			seq = StepSequencer(sequence=self.allNotesSequence, receiver=self.port)
-			baseseq._send = lambda x:None
-			#because Timer would trigger the NotImplementedError when it sends
 			_work(baseseq)
 			_work(seq)
+
+		def test_metaSequencer(self):
+			base = BaseSequencer(sequence=[(x,) for x in [60,61,62,63,64,65]], receiver=self.port)
+			meta = MetaSequencer(receiver=base, sequence=[{'division':8}], division=1)
+			base.start()
+			meta.start()
+			time.sleep(0.1)
+			base.stop()
+			meta.stop()
+			self.assertTrue(base.division == 8)
+
 
 
 	unittest.main(verbosity=2)
