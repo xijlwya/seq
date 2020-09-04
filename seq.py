@@ -367,7 +367,19 @@ class BaseSequencer(mido.ports.BaseOutput):
 		else:
 			raise ValueError('Invalid note length: '+str(val))
 
-	##TODO: set up a sequence property so the new sequence is behaving like the old sequence
+	@property
+	def sequence(self):
+		return self._sequence
+
+	@sequence.setter
+	def sequence(self, seq):
+		for n, elem in enumerate(seq):
+			if isinstance(elem, int):
+				#convenience to provide sequences of ints like [60,64,60,67]
+				seq[n] = (elem, )
+		if self._cursor > len(seq):
+			self._cursor = 0
+		self._sequence = seq
 
 
 class StepSequencer(BaseSequencer):
