@@ -1,4 +1,4 @@
-note_names = {
+NOTE_NAMES = {
 	'c':60,
 	'd':62,
 	'e':64,
@@ -8,7 +8,7 @@ note_names = {
 	'b':71
 	}
 
-chord_names = {
+CHORD_NAMES = {
 	'min'		:(0, 3, 7),
 	'maj'		:(0, 4, 7),
 	'min7'		:(0, 3, 7, 10),
@@ -35,7 +35,7 @@ chord_names = {
 	'aug7'		:(0, 4, 8, 10),
 }
 
-scale_names = {
+SCALE_NAMES = {
 	'lydian'	:(0, 2, 4, 5, 7, 9, 10),
 	'ionian'	:(0, 2, 4, 5, 7, 9, 11),
 	'mixolydian':(0, 2, 4, 5, 7, 9, 10),

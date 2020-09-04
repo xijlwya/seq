@@ -9,15 +9,38 @@ from seq_data import *
 #imports several note value dicts and CONSTANTS
 
 class NoteList:
+	'''a helper class to deal with sequences that represent musical notes
+
+	This class provides classmethods to operate on lists of musical notes. It is
+	bascially just a namespace and instantiating objects from it is depreciated.
+
+	Methods
+	¯¯¯¯¯¯¯
+	@classmethod
+	string_to_note(notes)
+		converts strings like "a1" "b#4 bb2" to MIDI note values
+
+	@classmethod
+	scale(rootnote, name, octaves=(4,))
+		returns the notes of a scale with a given root note within the given
+		octaves
+
+	@classmethod
+	chord(rootnote, scale, degree_w_mod)
+		returns the chord corresponding to a degree in a scale with a given
+		root note
+
+	'''
+
 	@classmethod
 	def _string_to_note(cls, note):
 		#helper method
 		#expects a note string with chord notes separated by spaces
-		#examples: 'c3 e3 g3', 'c1' ,'c#4 d5 gb6', 'd2']
+		#examples: 'c3 e3 g3', 'c1' ,'c#4 d5 gb6', 'd2'
 		chord_list = []
 		for n in note.split(' '):
 			if n:
-				note_value = note_names[n[0].lower()]
+				note_value = NOTE_NAMES[n[0].lower()]
 			else:
 				break
 
@@ -27,7 +50,7 @@ class NoteList:
 				elif n[1] == 'b':
 					note_value -= 1
 				note_value += 12*(int(n[2:])-4)
-				#-4 because c4 is the middle c, MIDI note 60
+				#-4 because c4 is the middle c, MIDI note 60, see seq_data dicts
 			else:
 				note_value += 12*(int(n[1:])-4)
 			chord_list.append(note_value)
@@ -35,6 +58,23 @@ class NoteList:
 
 	@classmethod
 	def string_to_note(cls, notes):
+		'''returns an integer or a list of interger tuples representing MIDI
+		note values
+
+		This method will determine whether it receives a list of strings or a
+		single string and then proceed to translate those strings to musical
+		notes
+
+		Parameters
+		¯¯¯¯¯¯¯¯¯¯
+		notes: str or list
+			either a single string denoting a musical note such as "a4" or "b#5"
+			or a list of such strings
+			in a list, multiple notes separated by spaces are used to denote
+			chords, e.g. ["a4", "a4 c5 e5", "ab4", "a4 cb5 e5"]
+
+		'''
+
 		if isinstance(notes, list):
 			note_list = []
 			for string in notes:
@@ -45,6 +85,33 @@ class NoteList:
 
 	@classmethod
 	def scale(cls, rootnote, name, octaves=(4,)):
+		'''returns the notes of a scale with a given root note within the given
+		octaves
+
+		Example use: scale('g', 'lydian') would give all notes of g lydian
+		above (and including) g4
+
+		The notes are provided from lowest to highest within each octave
+
+		Parameters
+		¯¯¯¯¯¯¯¯¯¯
+		rootnote: string
+			the root note of the scale as a string but without an octave
+			indicator, e.g. 'a#'
+
+		name: string
+			one of these names: 'lydian', 'ionian', 'mixolydian', 'dorian',
+			'aeolian', 'phrygian', 'locrian', 'major', 'minor'
+			there may be more in the future, see seq_data SCALE_NAMES dict
+
+		octaves: iter
+			an iterable providing integers between 0 and 9
+			the sequence of integers is the sequence of octaves in the output
+			sequence, e.g. [4,4,5,5] will output the fourth octave twice,
+			followed by the fifth octave twice, all within a single list
+
+		'''
+
 		#this method will read octaves as an iterator, allowing for custom
 		#sequences of octaves such as (4,5,4,3)
 		base_notes = []
@@ -60,11 +127,37 @@ class NoteList:
 
 	@classmethod
 	def chord(cls, rootnote, scale, degree_w_mod):
-		for rom in roman_priolist:
+		'''returns the notes of a chord degree of a given scale over a given
+		root note
+
+		The root note and scale are the same as in the scale function. The
+		degree is supposed to be given as a roman numeral ranging from I to VII
+		and a modifier can be added to that optionally, e.g. I7 or VIdim
+
+
+		Parameters
+		¯¯¯¯¯¯¯¯¯¯
+		rootnote: string
+			the root note of the scale as a string but without an octave
+			indicator, e.g. 'a#'
+
+		name: string
+			one of these names: 'lydian', 'ionian', 'mixolydian', 'dorian',
+			'aeolian', 'phrygian', 'locrian', 'major', 'minor'
+			there may be more in the future, see seq_data SCALE_NAMES dict
+
+		degree_w_mod: string
+			a string consisting of a roman numeral and a chord modifier
+			the numerals are lowercased internally, so the case does not matter
+			the modifiers can be obtained from seq_data CHORD_NAMES dict
+			e.g. 'vi7sus4'
+		'''
+
+		for rom in ROMAN_PRIOLIST:
 			if degree_w_mod.lower().startswith(rom):
-				degree_num = roman_num[rom]
+				degree_num = ROMAN_NUM[rom]
 				break
-		mod = degree_w_mod[len(rom):]
+		mod = degree_w_mod[len(rom):].lower()
 
 		resultchord = []
 		root = cls.string_to_note(rootnote)
@@ -72,10 +165,10 @@ class NoteList:
 		if mod:
 		##TODO: the modifier will overwrite the diatonic chord:
 		#if you put in 'VII7' it will always be a major chord with a minor seven
-			for semitone in chord_names[mod]:
+			for semitone in CHORD_NAMES[mod]:
 				resultchord.append(root + semitone)
 		else:
-			for semitone in scale_chords_abs[scale][degree_num]:
+			for semitone in SCALE_CHORDS_ABS[scale][degree_num]:
 				resultchord.append(root + semitone)
 		return tuple(resultchord)
 
@@ -91,14 +184,14 @@ class NoteList:
 	@classmethod
 	def _notes_of_scale(cls, base_note_str, scale):
 		base_note = cls._base_note_string(base_note_str)
-		scale_notes = scale_names[scale]
+		scale_notes = SCALE_NAMES[scale]
 		return [base_note + note for note in scale_notes]
 
 	@classmethod
 	def _chord_degree(cls, base_note_str, scale, degree):
 		base_note = cls._base_note_string(base_note_str)
-		deg = roman_num[degree.lower()]
-		notes = scale_chords_abs[scale][deg]
+		deg = ROMAN_NUM[degree.lower()]
+		notes = SCALE_CHORDS_ABS[scale][deg]
 		return tuple(base_note + note for note in notes)
 
 
@@ -114,14 +207,34 @@ class Singleton(type):
 
 
 class Timer(metaclass=Singleton):
-	"""
+	"""A timer that will regularily send MIDI clock messages
+
 	A timer will continuously send MIDI clock messages to its receiver. It
 	does so from a daemon thread so it is terminated ungraciously when the
 	interpreter exits.
 
-	-	'tempo' is the rate of the clock in bpm. That means that tempo*PPQN
-		pulses are sent in one minute
+	The timer class is a singleton and it is accessed via Timer().
+
+	Attributes
+	¯¯¯¯¯¯¯¯¯¯
+	tempo: int
+		is the rate of the clock in bpm. That means that tempo*PPQN pulses are
+		sent in one minute
+		PPQN (abbr. for "pulses per quarter note") is a constant from
+		seq_data.py
+
+	Methods
+	¯¯¯¯¯¯¯
+	add_receiver(rec): mido.ports.BaseOutput
+		adds rec to the list of ports that will receive MIDI clock messages from
+		the timer
+
+	remove_reciver(rec): mido.ports.BaseOutput
+		removes rec from the list of receivers
+		this will raise ValueError if rec is not in the list of receivers
+
 	"""
+
 	def __init__(self, tempo=120):
 		self._running = False
 		self.tempo = tempo
@@ -188,6 +301,8 @@ class BaseSequencer(mido.ports.BaseOutput):
 	sequence: list
 		a list of tuples which contain MIDI note numbers
 		e.g. [(60,), (60, 62), (62,), (62, 64)]
+		this will convert non-tuple intergers to 1-tuples so that [60,62]
+		becomes [(60, ), (62, )] internally
 
 	step: int
 		an integer indicating how many steps the sequencer advances through the
@@ -560,7 +675,7 @@ class Arpeggiator(BaseSequencer):
 				_chord_modifier = chord[1:].lower()
 
 
-			note_val = note_names[_root_note[0]]
+			note_val = NOTE_NAMES[_root_note[0]]
 			if len(_root_note) == 2:
 				if _root_note[1] == '#':
 					note_val += 1
@@ -570,9 +685,9 @@ class Arpeggiator(BaseSequencer):
 			notelist = []
 
 			try:
-				chord_semitones = chord_names[_chord_modifier]
+				chord_semitones = CHORD_NAMES[_chord_modifier]
 			except KeyError:
-				chord_semitones = chord_names['maj']
+				chord_semitones = CHORD_NAMES['maj']
 
 			for semitones in chord_semitones:
 				notelist.append(note_val + semitones)
@@ -609,7 +724,7 @@ if __name__ == '__main__':
 			self.port = self.Port()
 			self.allNotesSequence = [ \
 				n+ex+str(num) \
-				for n in note_names.keys() \
+				for n in NOTE_NAMES.keys() \
 				for ex in ['','#','b'] \
 				for num in range(1,11) \
 			]
@@ -643,8 +758,8 @@ if __name__ == '__main__':
 			with self.assertRaises(AttributeError):
 				NoteList.string_to_note(seq)
 
-			for scale in scale_names.keys():
-				for note in note_names.keys():
+			for scale in SCALE_NAMES.keys():
+				for note in NOTE_NAMES.keys():
 					for octave in range(1,10):
 						for offset in ('','#','b'):
 							NoteList.scale(note+offset, scale, octaves=(octave,))
