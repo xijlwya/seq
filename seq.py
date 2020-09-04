@@ -377,7 +377,7 @@ class BaseSequencer(mido.ports.BaseOutput):
 			if isinstance(elem, int):
 				#convenience to provide sequences of ints like [60,64,60,67]
 				seq[n] = (elem, )
-		if self._cursor > len(seq):
+		if self._cursor >= len(seq):
 			self._cursor = 0
 		self._sequence = seq
 
