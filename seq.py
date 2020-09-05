@@ -44,14 +44,14 @@ class NoteList:
 			else:
 				break
 
-			if n[1] == '#' or n[1] == 'b':
+			if len(n) > 2 and (n[1] == '#' or n[1] == 'b'):
 				if n[1] == '#':
 					note_value += 1
 				elif n[1] == 'b':
 					note_value -= 1
 				note_value += 12*(int(n[2:])-4)
 				#-4 because c4 is the middle c, MIDI note 60, see seq_data dicts
-			else:
+			elif len(n) == 2:
 				note_value += 12*(int(n[1:])-4)
 			chord_list.append(note_value)
 		return tuple(chord_list)
@@ -79,9 +79,9 @@ class NoteList:
 			note_list = []
 			for string in notes:
 				note_list.append(cls._string_to_note(string))
-			return note_list
+			return note_list #returns a list of tuples
 		else:
-			return cls._string_to_note(notes)
+			return cls._string_to_note(notes) #returns a tuple
 
 	@classmethod
 	def scale(cls, rootnote, name, octaves=(4,)):
@@ -153,24 +153,27 @@ class NoteList:
 			e.g. 'vi7sus4'
 		'''
 
-		for rom in ROMAN_PRIOLIST:
-			if degree_w_mod.lower().startswith(rom):
-				degree_num = ROMAN_NUM[rom]
-				break
-		mod = degree_w_mod[len(rom):].lower()
-
-		resultchord = []
-		root = cls.string_to_note(rootnote)
-
-		if mod:
-		##TODO: the modifier will overwrite the diatonic chord:
-		#if you put in 'VII7' it will always be a major chord with a minor seven
-			for semitone in CHORD_NAMES[mod]:
-				resultchord.append(root + semitone)
+		if not degree_w_mod.startswith(ROMAN_PRIO):
+			raise ValueError('"{deg}" is no applicable chord number'.format(deg=degree_w_mod))
 		else:
-			for semitone in SCALE_CHORDS_ABS[scale][degree_num]:
-				resultchord.append(root + semitone)
-		return tuple(resultchord)
+			for rom in ROMAN_PRIO:
+				if degree_w_mod.lower().startswith(rom):
+					degree_num = ROMAN_NUM[rom]
+					break
+			mod = degree_w_mod[len(rom):].lower()
+
+			resultchord = []
+			root = cls.string_to_note(rootnote)[0]
+
+			if mod:
+			##TODO: the modifier will overwrite the diatonic chord:
+			#if you put in 'VII7' it will always be a major chord with a minor seven
+				for semitone in CHORD_NAMES[mod]:
+					resultchord.append(root + semitone)
+			else:
+				for semitone in SCALE_CHORDS_ABS[scale][degree_num]:
+					resultchord.append(root + semitone)
+			return tuple(resultchord)
 
 
 	@classmethod
@@ -193,6 +196,13 @@ class NoteList:
 		deg = ROMAN_NUM[degree.lower()]
 		notes = SCALE_CHORDS_ABS[scale][deg]
 		return tuple(base_note + note for note in notes)
+
+	@classmethod
+	def tuplify(cls, seq):
+		#convenience to provide sequences of ints like [60,64,60,67]
+		for n, elem in enumerate(seq):
+			if isinstance(elem, int):
+				seq[n] = (elem, )
 
 
 class Singleton(type):
@@ -488,27 +498,117 @@ class BaseSequencer(mido.ports.BaseOutput):
 
 	@sequence.setter
 	def sequence(self, seq):
-		for n, elem in enumerate(seq):
-			if isinstance(elem, int):
-				#convenience to provide sequences of ints like [60,64,60,67]
-				seq[n] = (elem, )
 		if self._cursor >= len(seq):
 			self._cursor = 0
 		self._sequence = seq
 
 
-class StepSequencer(BaseSequencer):
+class EuclidianSequencer(BaseSequencer):
 	def __init__(
 		self,
-		sequence=[],
+		sequence=['i','iii','v','vi'],
 		receiver=None,
 		division=16,
 		channel=1,
-		step=1
+		seq_length=16,
+		num_beats=7,
+		rootnote='a',
+		scale='minor'
 	):
-		super().__init__(sequence,receiver,division,channel,step)
+		self._scale = scale
+		self._rootnote = rootnote
+		self.seq_length = seq_length
+		self.num_beats = num_beats
+		super().__init__(sequence,receiver,division,channel,step=1)
+		self.scale = scale
+		self.rootnote = rootnote
 
-	def _euclid(self, seq_length, num_beats):
+
+	@property
+	def sequence(self):
+		return self._sequence
+
+	@sequence.setter
+	def sequence(self, val):
+		super(__class__, self.__class__).sequence.__set__(self, val) #see https://bugs.python.org/issue14965
+		#TODO: somehow this calls the getter of BaseSequencer.sequence when setting up
+		#the object via BaseSequencer.__init__
+		#so BaseSequencer.__init__ accesses self.sequencer which is redeirected here,
+		#because it wants to set up the initial sequence
+		#then, this super call somehow arrives in BaseSequencer.sequence(self)
+		#which is the getter
+
+		self._reset_sequence()
+
+	def _reset_sequence(self):
+		rhythm = self._euclid(self.seq_length, self.num_beats)
+
+		self._internal_sequence = []
+		for chord in self.sequence:
+			cur = 0
+			chord_notes = NoteList.chord(self.rootnote, self.scale, chord)
+			for beat in rhythm:
+				if beat:
+					self._internal_sequence.append(chord_notes[cur])
+					cur += 1
+					cur = cur % len(chord_notes)
+				else:
+					self._internal_sequence.append(None)
+
+		self._cursor = 0
+
+	def _advance(self):
+		if len(self._internal_sequence) > 0:
+			current = self._internal_sequence[self._cursor]
+			self._cursor += self.step
+			self._cursor = self._cursor % len(self._internal_sequence)
+			return current
+
+	@property
+	def scale(self):
+		return self._scale
+
+	@scale.setter
+	def scale(self, val):
+		if val in SCALE_NAMES.keys():
+			if self._scale != val:
+				self._scale = val
+				self._reset_sequence()
+		else:
+			raise KeyError(val + ' is not a valid scale name')
+
+	@property
+	def rootnote(self):
+		return self._rootnote
+
+	@rootnote.setter
+	def rootnote(self, val):
+		if 		(len(val) == 2 \
+					and val[0] in NOTE_NAMES.keys()\
+					and val[1] in ['#', 'b'])\
+				or (len(val) == 1\
+					and val[0] in NOTE_NAMES.keys()\
+		):
+			if self._rootnote != val:
+				self._rootnote = val
+				self._reset_sequence()
+		else:
+			raise ValueError(val + ' is no viable root note')
+
+	@property
+	def num_beats(self):
+		return self._num_beats
+
+	@num_beats.setter
+	def num_beats(self, val):
+		if 0 < val < self.seq_length:
+			self._num_beats = val
+		else:
+			raise ValueError('{a} number of beats is not'\
+				' within bounds 0 < num < {b}'.format(a=val, b=self.seq_length))
+
+	@classmethod
+	def _euclid(cls, seq_length, num_beats):
 		'''
 		This returns a euclidian rhythm of length seq_length with num_beats
 		beats.
@@ -554,7 +654,8 @@ class StepSequencer(BaseSequencer):
 
 		return flatten(l+r)
 
-	def list_euclidian_sequences(self, seq_length, num_beats):
+	@classmethod
+	def list_euclidian_sequences(cls, seq_length, num_beats):
 		#returns a list of all euclidian sequences of length seq_length with
 		#num_beats beats that start with a beat
 		def math_euclid(a,b):
@@ -582,7 +683,7 @@ class StepSequencer(BaseSequencer):
 			l.append(s)
 		num = len(l) #number of all shifts
 
-		#all sequences after num//math_euc are repeatitions of the ones before
+		#all sequences after num//math_euc are repetitions of the ones before
 		#proof pending
 		return l[:num//math_euc]
 
@@ -641,17 +742,24 @@ class SequencerGroup(BaseSequencer):
 	def append(self, seq):
 		self._group.append(seq)
 
+
 class Arpeggiator(BaseSequencer):
-	def __init__(self, receiver=None, channel=1):
+	def __init__(
+		self,
+		receiver=None,
+		division=16,
+		channel=1
+	):
 		super().__init__(
-			receiver=receiver,
-			division=16,
-			channel=channel,
+			receiver,
+			division,
+			channel,
+			sequence=self._create_sequence(),
 			step=1
 		)
-		self.rhythm = [True, True, True, False,]
+
+		self.rhythm = [1,1,1,0]
 		self.chords = ['cmin','d#maj','gmin']
-		self.sequence = self._create_sequence()
 
 	@property
 	def chords(self):
@@ -764,35 +872,33 @@ if __name__ == '__main__':
 						for offset in ('','#','b'):
 							NoteList.scale(note+offset, scale, octaves=(octave,))
 
-		def test_Sequencer(self):
-			def _work(obj):
-				for elem in obj.sequence:
-					obj._advance()
-				obj._advance()
-				#this would raise some error if implementation of advance was broken
+		def test_BaseSequencer(self):
+			baseseq = BaseSequencer(
+				sequence=self.allNotesSequence,
+				receiver=self.port
+			)
+			for elem in baseseq.sequence:
+				baseseq._advance()
+			baseseq._advance()
+			#this would raise some error if implementation of advance was broken
 
-				obj.start()
-				with self.assertRaises(ValueError):
-					obj.division = 2**12
-				obj.division = 1
-				with self.assertRaises(ValueError):
-					obj.division = 0
-				obj.note_length = 0.1
-				obj.note_length = 1.0
-				with self.assertRaises(ValueError):
-					obj.note_length = 1.01
-				with self.assertRaises(ValueError):
-					obj.note_length = 0.0
-				with self.assertRaises(ValueError):
-					obj.note_length = 0.001
-				obj.stop()
+			baseseq.start()
+			with self.assertRaises(ValueError):
+				baseseq.division = 2**12
+			baseseq.division = 1
+			with self.assertRaises(ValueError):
+				baseseq.division = 0
+			baseseq.note_length = 0.1
+			baseseq.note_length = 1.0
+			with self.assertRaises(ValueError):
+				baseseq.note_length = 1.01
+			with self.assertRaises(ValueError):
+				baseseq.note_length = 0.0
+			with self.assertRaises(ValueError):
+				baseseq.note_length = 0.001
+			baseseq.stop()
 
-			baseseq = BaseSequencer(sequence=self.allNotesSequence, receiver=self.port)
-			seq = StepSequencer(sequence=self.allNotesSequence, receiver=self.port)
-			_work(baseseq)
-			_work(seq)
-
-		def test_metaSequencer(self):
+		def test_MetaSequencer(self):
 			base = BaseSequencer(sequence=[(x,) for x in [60,61,62,63,64,65]], receiver=self.port)
 			metaseq = [{'division':8, 'note_length':0.3, 'channel':2}, {'division':12, 'note_length':0.7, 'channel':12}]
 			meta = MetaSequencer(receiver=base, sequence=metaseq, division=1)
@@ -812,6 +918,12 @@ if __name__ == '__main__':
 			meta.stop()
 			base.stop()
 
+		def test_EuclidianSequencer(self):
+			euseq = EuclidianSequencer(receiver=self.port)
+			with self.assertRaises(ValueError):
+				euseq.sequence = ['a']
+
+
 
 
 	unittest.main(verbosity=2)
@@ -829,9 +941,9 @@ if __name__ == '__main__':
 	with PrintPort() as port:
 		Timer().tempo = 160
 		# arp = Arpeggiator(receiver=port)
-		seq = StepSequencer(receiver=port)
+		seq = EuclidianSequencer(receiver=port)
 		seq.sequence = sequence2
-		# seq = StepSequencer(receiver=port)
+		# seq = EuclidianSequencer(receiver=port)
 		# seq.division = 16
 		# seq.sequence = sequence1.string_to_note()
 		seq.start()

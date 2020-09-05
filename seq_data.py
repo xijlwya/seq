@@ -6,7 +6,7 @@ NOTE_NAMES = {
 	'g':67,
 	'a':69,
 	'b':71
-	}
+}
 
 CHORD_NAMES = {
 	'min'		:(0, 3, 7),
@@ -57,7 +57,7 @@ ROMAN_NUM = {
 	'vii':	6,
 }
 
-ROMAN_PRIOLIST = ['iii','ii','iv','i','vii','vi','v']
+ROMAN_PRIO = ('iii','ii','iv','i','vii','vi','v')
 
 SCALE_CHORDS_REL = {
 	'lydian':(
