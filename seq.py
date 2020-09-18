@@ -18,7 +18,8 @@ class NoteList:
 	¯¯¯¯¯¯¯
 	@classmethod
 	string_to_note(notes)
-		converts strings like "a1" "b#4 bb2" to MIDI note values
+		converts strings like "a1" "b#4 bb2" to MIDI note values and returns a
+		tuple containing the associated values
 
 	@classmethod
 	scale(rootnote, name, octaves=(4,))
@@ -503,7 +504,7 @@ class BaseSequencer(mido.ports.BaseOutput):
 		self._sequence = seq
 
 
-class EuclidianSequencer(BaseSequencer):
+class Arpeggiquencer(BaseSequencer):
 	def __init__(
 		self,
 		sequence=['i','iii','v','vi'],
@@ -515,14 +516,48 @@ class EuclidianSequencer(BaseSequencer):
 		rootnote='a',
 		scale='minor'
 	):
-		self._scale = scale
-		self._rootnote = rootnote
+		self._scale = scale #hack to make _reset_sequence() work in rootnote.setter and scale.setter
+		self._rootnote = rootnote #hack as above
 		self.seq_length = seq_length
 		self.num_beats = num_beats
-		super().__init__(sequence,receiver,division,channel,step=1)
-		self.scale = scale
-		self.rootnote = rootnote
+		super().__init__([],receiver,division,channel,step=1)
+		self.scale = scale #calls scale.setter
+		self.rootnote = rootnote #calls rootnote.setter
+		self.sequence = sequence
 
+		"""
+		How this will work in the future:
+
+		class Arpeggiquencer
+			has a notepool, containing all notes to generate patterns
+			from
+			a notepool may be a scale if chosen so, but has to be user generated
+			then
+
+			has an octave setting that determines which range of +-12 semitone
+			transpositions can occur on the notepool
+
+			has a rhythm, dictating what rhythm to play the notes in
+			rhythm may be euclidian if chosen so
+
+			has parts which consist of a notepool, rhythm and length
+			length determines after how many steps the next part is queued
+			each default to the previous part's values
+
+			['i','v','i','vii'] is a shorthand for four parts, all with the same
+			rhythm and length, but note pools according to the chord symbols
+
+			['i7','vsus2','i','vii9'] should be possible too
+
+			['cmin', 'gmin', 'cmin', 'bbmaj'] should be possible too
+
+			if the user only specifies chords, the rhythm should still be
+			changable, influencing the rhythm of all parts
+
+			this should be the only class available to the user in here
+			essentially dropping Arpeggiator
+
+		"""
 
 	@property
 	def sequence(self):
@@ -530,6 +565,7 @@ class EuclidianSequencer(BaseSequencer):
 
 	@sequence.setter
 	def sequence(self, val):
+
 		super(__class__, self.__class__).sequence.__set__(self, val) #see https://bugs.python.org/issue14965
 		#TODO: somehow this calls the getter of BaseSequencer.sequence when setting up
 		#the object via BaseSequencer.__init__
@@ -688,7 +724,6 @@ class EuclidianSequencer(BaseSequencer):
 		return l[:num//math_euc]
 
 
-
 class MetaSequencer(BaseSequencer):
 	def __init__(
 		self,
@@ -725,6 +760,7 @@ class MetaSequencer(BaseSequencer):
 				self.pulses = 0
 			else:
 				self._pulses += 1
+
 
 class SequencerGroup(BaseSequencer):
 	def __init__(
@@ -923,42 +959,4 @@ if __name__ == '__main__':
 			with self.assertRaises(ValueError):
 				euseq.sequence = ['a']
 
-
-
-
 	unittest.main(verbosity=2)
-
-	sequence2 = NoteList.string_to_note(['g#4','c5','f4'])
-
-	# output_list = mido.get_output_names()
-	# print('Select the target port:')
-	# for num, name in enumerate(output_list):
-	# 	print('{num}: {name}'.format(num=num, name=name))
-	#
-	# port = int(input('(seq) '))
-
-	# with mido.open_output(mido.get_output_names()[port]) as port:
-	with PrintPort() as port:
-		Timer().tempo = 160
-		# arp = Arpeggiator(receiver=port)
-		seq = EuclidianSequencer(receiver=port)
-		seq.sequence = sequence2
-		# seq = EuclidianSequencer(receiver=port)
-		# seq.division = 16
-		# seq.sequence = sequence1.string_to_note()
-		seq.start()
-		# arp.start()
-		time.sleep(1)
-		seq.stop()
-		#arp.chord = 'dmaj'
-		# time.sleep(5)
-		#arp.chord = 'd#sus2'
-		# time.sleep(5)
-		# arp.stop()
-	# 	seq1 = Sequencer(sequence=sequence1, receiver=synth)
-	# 	seq2 = Sequencer(sequence=sequence2, receiver=synth)
-	# 	seq1.start()
-	# 	seq2.start()
-	# 	time.sleep(5)
-		# seq1.stop()
-	# 	seq2.stop()
