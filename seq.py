@@ -155,7 +155,9 @@ class NoteList:
 		'''
 
 		if not degree_w_mod.startswith(ROMAN_PRIO):
-			raise ValueError('"{deg}" is no applicable chord number'.format(deg=degree_w_mod))
+			raise ValueError(
+				'"{deg}" is no applicable'
+				' chord number'.format(deg=degree_w_mod))
 		else:
 			for rom in ROMAN_PRIO:
 				if degree_w_mod.lower().startswith(rom):
@@ -168,7 +170,8 @@ class NoteList:
 
 			if mod:
 			##TODO: the modifier will overwrite the diatonic chord:
-			#if you put in 'VII7' it will always be a major chord with a minor seven
+			#if you put in 'VII7' it will always be a major chord with a minor
+			#seven
 				for semitone in CHORD_NAMES[mod]:
 					resultchord.append(root + semitone)
 			else:
@@ -181,7 +184,10 @@ class NoteList:
 	def _base_note_string(cls, base_note_str):
 		base_note = cls.string_to_note(base_note_str)
 		if len(base_note) > 1:
-			raise ValueError(base_note_str + ' invalid base note for a scale (probably a chord?)')
+			raise ValueError(
+				base_note_str + \
+				' invalid base note for a scale (probably a chord?)'
+			)
 		else:
 			return base_note[0]
 
@@ -516,7 +522,9 @@ class Arpeggiquencer(BaseSequencer):
 		rootnote='a',
 		scale='minor'
 	):
-		self._scale = scale #hack to make _reset_sequence() work in rootnote.setter and scale.setter
+		self._scale = scale
+		#hack to make _reset_sequence() work in
+		#rootnote.setter and scale.setter
 		self._rootnote = rootnote #hack as above
 		self.seq_length = seq_length
 		self.num_beats = num_beats
@@ -566,13 +574,15 @@ class Arpeggiquencer(BaseSequencer):
 	@sequence.setter
 	def sequence(self, val):
 
-		super(__class__, self.__class__).sequence.__set__(self, val) #see https://bugs.python.org/issue14965
-		#TODO: somehow this calls the getter of BaseSequencer.sequence when setting up
-		#the object via BaseSequencer.__init__
-		#so BaseSequencer.__init__ accesses self.sequencer which is redeirected here,
-		#because it wants to set up the initial sequence
-		#then, this super call somehow arrives in BaseSequencer.sequence(self)
-		#which is the getter
+		super(__class__, self.__class__).sequence.__set__(self, val)
+		#see https://bugs.python.org/issue14965
+
+		#TODO: somehow this calls the getter of BaseSequencer.sequence when
+		#setting up the object via BaseSequencer.__init__
+		#so BaseSequencer.__init__ accesses self.sequencer which is redeirected
+		#here, because it wants to set up the initial sequence then, this super
+		#call somehow arrives in BaseSequencer.sequence(self) which is the
+		#getter
 
 		self._reset_sequence()
 
@@ -651,7 +661,8 @@ class Arpeggiquencer(BaseSequencer):
 		'''
 		def flatten(l, ltypes=(list, tuple)):
 			#this flattens nested tuples and lists quite effectively
-			#from http://rightfootin.blogspot.com/2006/09/more-on-python-flatten.html
+			#from http://rightfootin.blogspot.com/
+			#		2006/09/more-on-python-flatten.html
 			ltype = type(l)
 			l = list(l)
 			i = 0
@@ -696,7 +707,8 @@ class Arpeggiquencer(BaseSequencer):
 		#num_beats beats that start with a beat
 		def math_euclid(a,b):
 			#iterative implementation of Euclid's algorithm
-			#see https://en.wikipedia.org/wiki/Euclidean_algorithm#Implementations
+			#see https://en.wikipedia.org/wiki/
+			#		Euclidean_algorithm#Implementations
 			while b != 0:
 				a, b = b, a % b
 			return a
@@ -749,8 +761,8 @@ class MetaSequencer(BaseSequencer):
 				self._current_step = self._advance()
 
 				if isinstance(self._current_step, dict):
-					#CAREFUL: json converts all dictionary key/value pairs to strings!
-					send_bytes = json.dumps(self._current_step).encode(encoding='ascii')
+					send_bytes = \
+						json.dumps(self._current_step).encode(encoding='ascii')
 					msg = mido.Message('sysex', data=send_bytes)
 					#receive this with dict = json.dumps(bytes(msg.data))
 					self.receiver.send(msg)
@@ -906,7 +918,11 @@ if __name__ == '__main__':
 				for note in NOTE_NAMES.keys():
 					for octave in range(1,10):
 						for offset in ('','#','b'):
-							NoteList.scale(note+offset, scale, octaves=(octave,))
+							NoteList.scale(
+								note+offset,
+								scale,
+								octaves=(octave,)
+							)
 
 		def test_BaseSequencer(self):
 			baseseq = BaseSequencer(
@@ -935,8 +951,14 @@ if __name__ == '__main__':
 			baseseq.stop()
 
 		def test_MetaSequencer(self):
-			base = BaseSequencer(sequence=[(x,) for x in [60,61,62,63,64,65]], receiver=self.port)
-			metaseq = [{'division':8, 'note_length':0.3, 'channel':2}, {'division':12, 'note_length':0.7, 'channel':12}]
+			base = BaseSequencer(
+				sequence=[(x,) for x in [60,61,62,63,64,65]],
+				receiver=self.port
+			)
+			metaseq = [
+				{'division':8, 'note_length':0.3, 'channel':2},
+				{'division':12, 'note_length':0.7, 'channel':12}
+			]
 			meta = MetaSequencer(receiver=base, sequence=metaseq, division=1)
 			Timer().remove_receiver(meta)
 			Timer().remove_receiver(base)
@@ -954,8 +976,8 @@ if __name__ == '__main__':
 			meta.stop()
 			base.stop()
 
-		def test_EuclidianSequencer(self):
-			euseq = EuclidianSequencer(receiver=self.port)
+		def test_Arpeggiquencer(self):
+			euseq = Arpeggiquencer(receiver=self.port)
 			with self.assertRaises(ValueError):
 				euseq.sequence = ['a']
 
