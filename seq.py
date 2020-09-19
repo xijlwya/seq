@@ -783,7 +783,7 @@ class SequencerGroup(BaseSequencer):
 		channel=1,
 		step=1
 	):
-		super().__init__(sequencer,	receiver, division,	channel, step)
+		super().__init__(sequence, receiver, division, channel, step)
 		Timer().remove_receiver(self)
 		self._group = []
 
