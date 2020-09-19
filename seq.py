@@ -467,6 +467,8 @@ class BaseSequencer(mido.ports.BaseOutput):
 
 	def start(self):
 		self._running = True
+		self._cursor = 0
+		self._pulses = 0
 
 	def _advance(self):
 		if len(self.sequence) > 0:
