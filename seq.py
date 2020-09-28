@@ -546,7 +546,8 @@ class Sequencer(mido.ports.BaseOutput):
 
 	@note_pool.setter
 	def note_pool(self, pool):
-		self._note_pool = NoteList.tuplify(pool)
+		NoteList.tuplify(pool)
+		self._note_pool = pool
 		if self._note_cursor >= len(pool):
 			self._note_cursor = 0
 
