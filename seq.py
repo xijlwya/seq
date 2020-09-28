@@ -6,7 +6,7 @@ import itertools
 import json
 
 from seq_data import *
-#imports several note value dicts and CONSTANTS
+#imports several note value dicts and constants, all ALLCAPS
 
 class NoteList:
 	'''a helper class to deal with sequences that represent musical notes
@@ -367,9 +367,10 @@ class BaseSequencer(mido.ports.BaseOutput):
 		receiver=None,
 		division=16,
 		channel=1,
-		step=1
+		step=1,
+		name=None
 	):
-		super().__init__()
+		super().__init__(name=name)
 		#for inheriting from BaseOutput
 		#with this, self._lock (threading.Lock object) is available
 
@@ -510,6 +511,20 @@ class BaseSequencer(mido.ports.BaseOutput):
 		if self._cursor >= len(seq):
 			self._cursor = 0
 		self._sequence = seq
+
+	@property
+	def channel(self):
+		return self._channel
+
+	@channel.setter
+	def channel(self, ch):
+		if 0 <= ch <= 15:
+			self._channel = int(ch)
+		else:
+			raise ValueError('invalid channel {ch}'.format(ch=ch))
+
+	def __str__(self):
+		return '{name}@channel {ch}'.format(name=self.name, ch=self.channel)
 
 
 class Arpeggiquencer(BaseSequencer):
