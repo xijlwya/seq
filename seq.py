@@ -1,8 +1,6 @@
 import mido
 import time
-import random
 import threading
-import itertools
 import json
 import re
 
