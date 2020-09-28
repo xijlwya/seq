@@ -298,7 +298,7 @@ class Timer(metaclass=Singleton):
 		self.receivers.remove(rec)
 
 
-class BaseSequencer(mido.ports.BaseOutput):
+class Sequencer(mido.ports.BaseOutput):
 	"""A basic step sequencer which sends MIDI note messages
 
 	This is a step sequencer which plays back sequences to a MIDI device. It
@@ -585,30 +585,30 @@ if __name__ == '__main__':
 								octaves=(octave,)
 							)
 
-		def test_BaseSequencer(self):
-			baseseq = BaseSequencer(
+		def test_Sequencer(self):
+			seq = Sequencer(
 				sequence=self.allNotesSequence,
 				receiver=self.port
 			)
-			for elem in baseseq.sequence:
-				baseseq._advance()
-			baseseq._advance()
+			for elem in seq.sequence:
+				seq._advance()
+			seq._advance()
 			#this would raise some error if implementation of advance was broken
 
-			baseseq.start()
+			seq.start()
 			with self.assertRaises(ValueError):
-				baseseq.division = 2**12
-			baseseq.division = 1
+				seq.division = 2**12
+			seq.division = 1
 			with self.assertRaises(ValueError):
-				baseseq.division = 0
-			baseseq.note_length = 0.1
-			baseseq.note_length = 1.0
+				seq.division = 0
+			seq.note_length = 0.1
+			seq.note_length = 1.0
 			with self.assertRaises(ValueError):
-				baseseq.note_length = 1.01
+				seq.note_length = 1.01
 			with self.assertRaises(ValueError):
-				baseseq.note_length = 0.0
+				seq.note_length = 0.0
 			with self.assertRaises(ValueError):
-				baseseq.note_length = 0.001
-			baseseq.stop()
+				seq.note_length = 0.001
+			seq.stop()
 
 	unittest.main(verbosity=2)
