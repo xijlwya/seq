@@ -4,6 +4,7 @@ import random
 import threading
 import itertools
 import json
+import re
 
 from seq_data import *
 #imports several note value dicts and constants, all ALLCAPS
@@ -363,7 +364,8 @@ class Sequencer(mido.ports.BaseOutput):
 
 	def __init__(
 		self,
-		sequence=[],
+		sequence='',
+		note_pool=[],
 		receiver=None,
 		division=16,
 		channel=1,
@@ -376,14 +378,23 @@ class Sequencer(mido.ports.BaseOutput):
 
 		self._running = False
 		self._pulses = 0
-		self._cursor = 0
+		self._rhythm_cursor = 0
+		self._note_cursor = 0
 		Timer().add_receiver(self)
 		#set up the sequencer to receive clock messages from the Timer
 
 		self.receiver = receiver
 		#receiver is supposed to be a mido port with a send(msg) method
 
+		self.regex = re.compile(r'(-|xo*)*')
+		#regular expression to check sequence strings
+		# ( ... )*	-> 0 or more
+		# (A | B)	-> A or B
+		# -			-> match '-'
+		# xo*		-> match 'x' followed by 0 or more 'o'
+
 		self.sequence = sequence
+		self.note_pool = note_pool
 		self.step = step
 
 		self.division = division
@@ -468,15 +479,23 @@ class Sequencer(mido.ports.BaseOutput):
 
 	def start(self):
 		self._running = True
-		self._cursor = 0
+		self._rhythm_cursor = 0
+		self._note_cursor = 0
 		self._pulses = 0
 
 	def _advance(self):
 		if len(self.sequence) > 0:
-			current = self.sequence[self._cursor]
-			self._cursor += self.step
-			self._cursor = self._cursor % len(self.sequence)
-			return current
+			current = self.sequence[self._rhythm_cursor]
+			self._rhythm_cursor += self.step
+			self._rhythm_cursor = self._rhythm_cursor % len(self.sequence)
+			if current == 'x':
+				self._note_cursor += self.step
+				self._note_cursor = self._note_cursor % len(self.note_pool)
+				return self.note_pool[self._note_cursor]
+			elif current == 'o':
+				pass #TODO implement a tie note
+			else: #current == '-'
+				pass
 
 	@property
 	def division(self):
@@ -508,9 +527,23 @@ class Sequencer(mido.ports.BaseOutput):
 
 	@sequence.setter
 	def sequence(self, seq):
-		if self._cursor >= len(seq):
-			self._cursor = 0
-		self._sequence = seq
+		check = self.regex.fullmatch(seq) #see __init__ for regex
+		if check:
+			self._sequence = seq
+			if self._rhythm_cursor >= len(seq):
+				self._rhythm_cursor = 0
+		else:
+			raise ValueError('Invalid sequence string {s}'.format(s=s))
+
+	@property
+	def note_pool(self):
+		return self._note_pool
+
+	@note_pool.setter
+	def note_pool(self, pool):
+		self._note_pool = pool
+		if self._note_cursor >= len(pool):
+			self._note_cursor = 0
 
 	@property
 	def channel(self):
@@ -587,7 +620,8 @@ if __name__ == '__main__':
 
 		def test_Sequencer(self):
 			seq = Sequencer(
-				sequence=self.allNotesSequence,
+				sequence='x',
+				note_pool=self.allNotesSequence,
 				receiver=self.port
 			)
 			for elem in seq.sequence:
