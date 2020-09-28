@@ -611,35 +611,4 @@ if __name__ == '__main__':
 				baseseq.note_length = 0.001
 			baseseq.stop()
 
-		def test_MetaSequencer(self):
-			base = BaseSequencer(
-				sequence=[(x,) for x in [60,61,62,63,64,65]],
-				receiver=self.port
-			)
-			metaseq = [
-				{'division':8, 'note_length':0.3, 'channel':2},
-				{'division':12, 'note_length':0.7, 'channel':12}
-			]
-			meta = MetaSequencer(receiver=base, sequence=metaseq, division=1)
-			Timer().remove_receiver(meta)
-			Timer().remove_receiver(base)
-			meta.start()
-			base.start()
-			meta._clock_callback()
-			self.assertTrue(base.division == 8)
-			self.assertTrue(base.note_length == 0.3)
-			self.assertTrue(base.channel == 2)
-			meta._pulses = 0
-			meta._clock_callback()
-			self.assertTrue(base.division == 12)
-			self.assertTrue(base.note_length == 0.7)
-			self.assertTrue(base.channel == 12)
-			meta.stop()
-			base.stop()
-
-		def test_Arpeggiquencer(self):
-			euseq = Arpeggiquencer(receiver=self.port)
-			with self.assertRaises(ValueError):
-				euseq.sequence = ['a']
-
 	unittest.main(verbosity=2)
